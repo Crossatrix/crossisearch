@@ -26,7 +26,7 @@ function SubmitPage() {
   const cap = useServerFn(getDailyCap);
 
   const [url, setUrl] = useState("");
-  const [kind, setKind] = useState<"sitemap" | "page" | "file">("sitemap");
+  const [kind, setKind] = useState<"page" | "file">("page");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
