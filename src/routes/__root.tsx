@@ -77,14 +77,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "Crossi Search" },
+      { name: "description", content: "Crossi Web Discover is a web search engine that indexes user-submitted content and provides AI-generated overviews." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "Crossi Search" },
+      { property: "og:description", content: "Crossi Web Discover is a web search engine that indexes user-submitted content and provides AI-generated overviews." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Crossi Search" },
+      { name: "twitter:description", content: "Crossi Web Discover is a web search engine that indexes user-submitted content and provides AI-generated overviews." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/694b1c52-d402-4f74-b4b3-cec7d749b60d/id-preview-94042f08--451daff4-31ea-410c-ab0f-6743a930f0d7.lovable.app-1781270884348.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/694b1c52-d402-4f74-b4b3-cec7d749b60d/id-preview-94042f08--451daff4-31ea-410c-ab0f-6743a930f0d7.lovable.app-1781270884348.png" },
     ],
     links: [
       {
