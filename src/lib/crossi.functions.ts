@@ -106,13 +106,12 @@ export const submitUrl = createServerFn({ method: "POST" })
     z.object({
       user_id: z.string().min(1),
       url: z.string().url(),
-      kind: z.enum(["sitemap", "page", "file"]),
+      kind: z.enum(["page", "file"]),
     }),
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // Daily cap
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { count, error: countErr } = await supabaseAdmin
       .from("submissions")
@@ -130,68 +129,73 @@ export const submitUrl = createServerFn({ method: "POST" })
     let rewardAmount = 0;
     let reason = "";
 
-    if (data.kind === "sitemap") {
-      const xml = await fetchText(data.url);
-      const locs = extractLocs(xml);
-      if (locs.length === 0) return { error: "No <loc> entries found in sitemap." };
-
-      for (const loc of locs) {
-        try {
-          const html = await fetchText(loc);
-          const { title, description, text } = stripHtml(html);
-          const { error } = await supabaseAdmin.from("pages").upsert(
-            {
-              url: loc,
-              title: title || loc,
-              description,
-              content: text,
-              source_sitemap: data.url,
-              submitted_by: data.user_id,
-              kind: "page",
-            },
-            { onConflict: "url", ignoreDuplicates: false },
-          );
-          if (!error) indexedUrls.push(loc);
-        } catch (e) {
-          console.warn("Skip", loc, e);
+    async function indexPage(pageUrl: string, sourceSitemap?: string) {
+      try {
+        const html = await fetchText(pageUrl);
+        let title = pageUrl;
+        let description = "";
+        let text = html.slice(0, 20000);
+        if (/<html|<!doctype/i.test(html)) {
+          const parsed = stripHtml(html);
+          title = parsed.title || pageUrl;
+          description = parsed.description;
+          text = parsed.text;
+        } else {
+          text = html.replace(/\s+/g, " ").trim().slice(0, 20000);
         }
+        const { error } = await supabaseAdmin.from("pages").upsert(
+          {
+            url: pageUrl,
+            title,
+            description,
+            content: text,
+            source_sitemap: sourceSitemap,
+            submitted_by: data.user_id,
+            kind: "page",
+          },
+          { onConflict: "url", ignoreDuplicates: false },
+        );
+        if (!error) indexedUrls.push(pageUrl);
+      } catch (e) {
+        console.warn("Skip", pageUrl, e);
       }
-      if (indexedUrls.length === 0) return { error: "Could not index any pages from sitemap." };
-      rewardAmount = 100;
-      reason = `Crossi Search sitemap (${indexedUrls.length} pages)`;
-    } else {
-      // page or file
+    }
+
+    if (data.kind === "file") {
       const body = await fetchText(data.url);
-      let title = data.url;
-      let description = "";
-      let text = body.slice(0, 20000);
-      if (/<html|<!doctype/i.test(body)) {
-        const parsed = stripHtml(body);
-        title = parsed.title || data.url;
-        description = parsed.description;
-        text = parsed.text;
-      } else {
-        // plain text/file
-        text = body.replace(/\s+/g, " ").trim().slice(0, 20000);
-      }
+      const text = body.replace(/\s+/g, " ").trim().slice(0, 20000);
       const { error } = await supabaseAdmin.from("pages").upsert(
         {
           url: data.url,
-          title,
-          description,
+          title: data.url,
+          description: "",
           content: text,
           submitted_by: data.user_id,
-          kind: data.kind === "file" ? "file" : "page",
+          kind: "file",
         },
         { onConflict: "url", ignoreDuplicates: false },
       );
       if (error) return { error: error.message };
       indexedUrls.push(data.url);
-      rewardAmount = data.kind === "file" ? 50 : 100;
-      reason =
-        data.kind === "file"
-          ? "Crossi Search file submission"
-          : "Crossi Search page submission";
+      rewardAmount = 50;
+      reason = "Crossi Search file submission";
+    } else {
+      await indexPage(data.url);
+      const origin = new URL(data.url).origin;
+      const sitemapUrl = origin + "/sitemap.xml";
+      try {
+        const xml = await fetchText(sitemapUrl);
+        const locs = extractLocs(xml);
+        for (const loc of locs) {
+          if (loc === data.url) continue;
+          await indexPage(loc, sitemapUrl);
+        }
+      } catch (e) {
+        console.warn("No sitemap at", sitemapUrl, e);
+      }
+      if (indexedUrls.length === 0) return { error: "Could not index the submitted page." };
+      rewardAmount = 100;
+      reason = `Crossi Search page submission (${indexedUrls.length} pages)`;
     }
 
     await awardCroins(data.user_id, rewardAmount, reason);
@@ -256,36 +260,42 @@ export const aiOverview = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
-    const key = process.env.CROSSI_AI_KEY;
+    const key = process.env.LOVABLE_API_KEY;
     if (!key) return { overview: "" };
     if (data.sources.length === 0) return { overview: "" };
 
-    const prompt = `Summarize these Search results for the query "${data.query}": ${data.sources.join(", ")}`;
-    const url =
-      CROSSI_AI_URL +
-      "?key=" +
-      encodeURIComponent(key) +
-      "&model=" +
-      encodeURIComponent("Crossi 5.1 Lite") +
-      "&prompt=" +
-      encodeURIComponent(prompt);
+    const systemPrompt =
+      "You are Crossi 5.1 Lite, the AI overview engine inside Crossi Search. Given a user query and a short list of indexed result snippets, write a concise 2-4 sentence overview answering the query. Only use the provided sources. If they don't answer the query, say so briefly. No markdown headings, no lists, plain prose.";
+    const userPrompt = `Query: ${data.query}\n\nSources:\n${data.sources
+      .map((s, i) => `[${i + 1}] ${s}`)
+      .join("\n")}`;
+
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
-      const txt = await res.text();
-      if (!res.ok) return { overview: "" };
-      try {
-        const j = JSON.parse(txt);
-        const out =
-          (j.response as string) ||
-          (j.result as string) ||
-          (j.output as string) ||
-          (j.text as string) ||
-          (j.summary as string) ||
-          txt;
-        return { overview: String(out) };
-      } catch {
-        return { overview: txt };
+      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash-lite",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+        }),
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        console.error("AI overview gateway error", res.status, t);
+        return { overview: "" };
       }
+      const j = (await res.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+      const out = j.choices?.[0]?.message?.content?.trim() ?? "";
+      return { overview: out };
     } catch (e) {
       console.error("AI overview failed", e);
       return { overview: "" };
