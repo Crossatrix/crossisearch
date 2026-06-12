@@ -9,13 +9,9 @@ const searchSchema = z.object({ q: z.string().catch("") });
 
 export const Route = createFileRoute("/search")({
   validateSearch: searchSchema,
-  head: ({ match }) => ({
+  head: () => ({
     meta: [
-      {
-        title: match.search.q
-          ? `${match.search.q} — Crossi Search`
-          : "Crossi Search",
-      },
+      { title: "Crossi Search" },
       {
         name: "description",
         content: "Search the Crossi community-indexed web.",
