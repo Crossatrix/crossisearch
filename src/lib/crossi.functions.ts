@@ -216,51 +216,18 @@ export const searchPages = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const q = data.query.trim();
+    // Escape PostgREST `or` filter: strip commas, parens, and percent signs
+    const safe = q.replace(/[,()%*]/g, " ").trim();
+    const term = `%${safe}%`;
 
-    // Build a tsquery: split words, AND-join with :*
-    const ts = q
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((w) => w.replace(/[^\p{L}\p{N}]+/gu, "") + ":*")
-      .filter((w) => w.length > 2)
-      .join(" & ");
-
-    let results: Array<{
-      id: string;
-      url: string;
-      title: string | null;
-      description: string | null;
-      content: string | null;
-      kind: string;
-    }> = [];
-
-    if (ts) {
-      const { data: rows, error } = await supabaseAdmin
-        .from("pages")
-        .select("id,url,title,description,content,kind")
-        .textSearch("fts", ts, { config: "english" })
-        .limit(20);
-      // Use raw rpc-like fallback if textSearch column missing — try ilike
-      if (error || !rows) {
-        const { data: fb } = await supabaseAdmin
-          .from("pages")
-          .select("id,url,title,description,content,kind")
-          .or(
-            `title.ilike.%${q}%,description.ilike.%${q}%,content.ilike.%${q}%`,
-          )
-          .limit(20);
-        results = fb || [];
-      } else {
-        results = rows;
-      }
-    } else {
-      const { data: fb } = await supabaseAdmin
-        .from("pages")
-        .select("id,url,title,description,content,kind")
-        .or(`title.ilike.%${q}%,description.ilike.%${q}%,content.ilike.%${q}%`)
-        .limit(20);
-      results = fb || [];
-    }
+    const { data: rows } = await supabaseAdmin
+      .from("pages")
+      .select("id,url,title,description,content,kind")
+      .or(
+        `title.ilike.${term},description.ilike.${term},content.ilike.${term}`,
+      )
+      .limit(20);
+    const results = rows || [];
 
     return {
       results: results.map((r) => {
