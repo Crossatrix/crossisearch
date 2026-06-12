@@ -315,3 +315,47 @@ export const getDailyCap = createServerFn({ method: "POST" })
       .gte("created_at", since);
     return { used: count ?? 0, cap: DAILY_CAP };
   });
+
+// ========== DELETE ENTRY (ADMIN ONLY) ==========
+export const deletePage = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      page_id: z.string().uuid(),
+      user_email: z.string().email(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    // Only allow admin email to delete
+    if (data.user_email !== "Cross.a.trix.owner@hotmail.com") {
+      return { error: "Unauthorized: Admin access required" };
+    }
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    
+    // Get page info before deletion for logging
+    const { data: page } = await supabaseAdmin
+      .from("pages")
+      .select("url, title")
+      .eq("id", data.page_id)
+      .single();
+
+    const { error } = await supabaseAdmin
+      .from("pages")
+      .delete()
+      .eq("id", data.page_id);
+
+    if (error) {
+      return { error: error.message };
+    }
+
+    // Log the admin action
+    await supabaseAdmin.from("admin_logs").insert({
+      admin_email: data.user_email,
+      action: "delete",
+      target_table: "pages",
+      target_id: data.page_id,
+      details: { url: page?.url, title: page?.title },
+    });
+
+    return { success: true };
+  });
