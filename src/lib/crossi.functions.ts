@@ -106,13 +106,12 @@ export const submitUrl = createServerFn({ method: "POST" })
     z.object({
       user_id: z.string().min(1),
       url: z.string().url(),
-      kind: z.enum(["sitemap", "page", "file"]),
+      kind: z.enum(["page", "file"]),
     }),
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // Daily cap
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { count, error: countErr } = await supabaseAdmin
       .from("submissions")
@@ -130,68 +129,73 @@ export const submitUrl = createServerFn({ method: "POST" })
     let rewardAmount = 0;
     let reason = "";
 
-    if (data.kind === "sitemap") {
-      const xml = await fetchText(data.url);
-      const locs = extractLocs(xml);
-      if (locs.length === 0) return { error: "No <loc> entries found in sitemap." };
-
-      for (const loc of locs) {
-        try {
-          const html = await fetchText(loc);
-          const { title, description, text } = stripHtml(html);
-          const { error } = await supabaseAdmin.from("pages").upsert(
-            {
-              url: loc,
-              title: title || loc,
-              description,
-              content: text,
-              source_sitemap: data.url,
-              submitted_by: data.user_id,
-              kind: "page",
-            },
-            { onConflict: "url", ignoreDuplicates: false },
-          );
-          if (!error) indexedUrls.push(loc);
-        } catch (e) {
-          console.warn("Skip", loc, e);
+    async function indexPage(pageUrl: string, sourceSitemap?: string) {
+      try {
+        const html = await fetchText(pageUrl);
+        let title = pageUrl;
+        let description = "";
+        let text = html.slice(0, 20000);
+        if (/<html|<!doctype/i.test(html)) {
+          const parsed = stripHtml(html);
+          title = parsed.title || pageUrl;
+          description = parsed.description;
+          text = parsed.text;
+        } else {
+          text = html.replace(/\s+/g, " ").trim().slice(0, 20000);
         }
+        const { error } = await supabaseAdmin.from("pages").upsert(
+          {
+            url: pageUrl,
+            title,
+            description,
+            content: text,
+            source_sitemap: sourceSitemap,
+            submitted_by: data.user_id,
+            kind: "page",
+          },
+          { onConflict: "url", ignoreDuplicates: false },
+        );
+        if (!error) indexedUrls.push(pageUrl);
+      } catch (e) {
+        console.warn("Skip", pageUrl, e);
       }
-      if (indexedUrls.length === 0) return { error: "Could not index any pages from sitemap." };
-      rewardAmount = 100;
-      reason = `Crossi Search sitemap (${indexedUrls.length} pages)`;
-    } else {
-      // page or file
+    }
+
+    if (data.kind === "file") {
       const body = await fetchText(data.url);
-      let title = data.url;
-      let description = "";
-      let text = body.slice(0, 20000);
-      if (/<html|<!doctype/i.test(body)) {
-        const parsed = stripHtml(body);
-        title = parsed.title || data.url;
-        description = parsed.description;
-        text = parsed.text;
-      } else {
-        // plain text/file
-        text = body.replace(/\s+/g, " ").trim().slice(0, 20000);
-      }
+      const text = body.replace(/\s+/g, " ").trim().slice(0, 20000);
       const { error } = await supabaseAdmin.from("pages").upsert(
         {
           url: data.url,
-          title,
-          description,
+          title: data.url,
+          description: "",
           content: text,
           submitted_by: data.user_id,
-          kind: data.kind === "file" ? "file" : "page",
+          kind: "file",
         },
         { onConflict: "url", ignoreDuplicates: false },
       );
       if (error) return { error: error.message };
       indexedUrls.push(data.url);
-      rewardAmount = data.kind === "file" ? 50 : 100;
-      reason =
-        data.kind === "file"
-          ? "Crossi Search file submission"
-          : "Crossi Search page submission";
+      rewardAmount = 50;
+      reason = "Crossi Search file submission";
+    } else {
+      await indexPage(data.url);
+      const origin = new URL(data.url).origin;
+      const sitemapUrl = origin + "/sitemap.xml";
+      try {
+        const xml = await fetchText(sitemapUrl);
+        const locs = extractLocs(xml);
+        for (const loc of locs) {
+          if (loc === data.url) continue;
+          await indexPage(loc, sitemapUrl);
+        }
+      } catch (e) {
+        console.warn("No sitemap at", sitemapUrl, e);
+      }
+      if (indexedUrls.length === 0) return { error: "Could not index the submitted page." };
+      rewardAmount = 100;
+      reason = `Crossi Search page submission (${indexedUrls.length} pages)`;
     }
 
     await awardCroins(data.user_id, rewardAmount, reason);
