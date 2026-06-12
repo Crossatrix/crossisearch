@@ -260,36 +260,42 @@ export const aiOverview = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
-    const key = process.env.CROSSI_AI_KEY;
+    const key = process.env.LOVABLE_API_KEY;
     if (!key) return { overview: "" };
     if (data.sources.length === 0) return { overview: "" };
 
-    const prompt = `Summarize these Search results for the query "${data.query}": ${data.sources.join(", ")}`;
-    const url =
-      CROSSI_AI_URL +
-      "?key=" +
-      encodeURIComponent(key) +
-      "&model=" +
-      encodeURIComponent("Crossi 5.1 Lite") +
-      "&prompt=" +
-      encodeURIComponent(prompt);
+    const systemPrompt =
+      "You are Crossi 5.1 Lite, the AI overview engine inside Crossi Search. Given a user query and a short list of indexed result snippets, write a concise 2-4 sentence overview answering the query. Only use the provided sources. If they don't answer the query, say so briefly. No markdown headings, no lists, plain prose.";
+    const userPrompt = `Query: ${data.query}\n\nSources:\n${data.sources
+      .map((s, i) => `[${i + 1}] ${s}`)
+      .join("\n")}`;
+
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
-      const txt = await res.text();
-      if (!res.ok) return { overview: "" };
-      try {
-        const j = JSON.parse(txt);
-        const out =
-          (j.response as string) ||
-          (j.result as string) ||
-          (j.output as string) ||
-          (j.text as string) ||
-          (j.summary as string) ||
-          txt;
-        return { overview: String(out) };
-      } catch {
-        return { overview: txt };
+      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash-lite",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+        }),
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        console.error("AI overview gateway error", res.status, t);
+        return { overview: "" };
       }
+      const j = (await res.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+      const out = j.choices?.[0]?.message?.content?.trim() ?? "";
+      return { overview: out };
     } catch (e) {
       console.error("AI overview failed", e);
       return { overview: "" };
