@@ -100,14 +100,14 @@ function SubmitPage() {
           <div>
             <h1 className="text-2xl font-bold">Submit to Crossi Search</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Add a sitemap, single page, or file URL. Only submitted content is searchable.
+              Add a page or file URL. Pages automatically pull in the domain's sitemap.xml.
             </p>
           </div>
 
           <div>
             <label className="block text-sm mb-1.5">Type</label>
-            <div className="grid grid-cols-3 gap-2">
-              {(["sitemap", "page", "file"] as const).map((k) => (
+            <div className="grid grid-cols-2 gap-2">
+              {(["page", "file"] as const).map((k) => (
                 <button
                   key={k}
                   type="button"
@@ -134,11 +134,9 @@ function SubmitPage() {
               type="url"
               required
               placeholder={
-                kind === "sitemap"
-                  ? "https://example.com/sitemap.xml"
-                  : kind === "file"
-                    ? "https://example.com/doc.txt"
-                    : "https://example.com/page"
+                kind === "file"
+                  ? "https://example.com/doc.txt"
+                  : "https://example.com/page"
               }
               value={url}
               onChange={(e) => setUrl(e.target.value)}
