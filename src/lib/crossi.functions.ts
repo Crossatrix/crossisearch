@@ -4,13 +4,10 @@ import { z } from "zod";
 const CROSSATRIX_AUTH_URL =
   "https://digjxtmzafzcgytgcwmb.supabase.co/functions/v1/crossatrix-auth";
 const CROSSATRIX_CROIN_URL =
-  "https://digjxtmzafzcgytgcwmb.supabase.co/functions/v1/crossatrix-auth"; // croin endpoint shares base; same fn handles action
-// Per docs, croin endpoint uses x-api-key + action body. Real path may differ; using same supabase fn host.
-const CROSSI_AI_URL =
-  "https://hqibtbdovjcocqgwqwbw.supabase.co/functions/v1/public-api";
+  "https://digjxtmzafzcgytgcwmb.supabase.co/functions/v1/crossatrix-auth";
 
-const DAILY_CAP = 20;
 const SITEMAP_PAGE_LIMIT = 80;
+const SUBMISSIONS_BUCKET = "submissions";
 
 function stripHtml(html: string): { title: string; text: string; description: string } {
   const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
@@ -103,33 +100,38 @@ export const crossatrixLogin = createServerFn({ method: "POST" })
 // ========== SUBMIT ==========
 export const submitUrl = createServerFn({ method: "POST" })
   .inputValidator(
-    z.object({
-      user_id: z.string().min(1),
-      url: z.string().url(),
-      kind: z.enum(["page", "file"]),
-    }),
+    z.discriminatedUnion("kind", [
+      z.object({
+        kind: z.literal("page"),
+        user_id: z.string().min(1),
+        url: z.string().url(),
+      }),
+      z.object({
+        kind: z.literal("file"),
+        user_id: z.string().min(1),
+        storage_path: z.string().min(1),
+        filename: z.string().min(1),
+      }),
+    ]),
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { count, error: countErr } = await supabaseAdmin
-      .from("submissions")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", data.user_id)
-      .gte("created_at", since);
-    if (countErr) throw new Error(countErr.message);
-    if ((count ?? 0) >= DAILY_CAP) {
-      return {
-        error: `Daily submission cap reached (${DAILY_CAP}). Try again tomorrow.`,
-      };
-    }
 
     const indexedUrls: string[] = [];
     let rewardAmount = 0;
     let reason = "";
 
+    async function alreadyIndexed(u: string): Promise<boolean> {
+      const { data: existing } = await supabaseAdmin
+        .from("pages")
+        .select("id")
+        .eq("url", u)
+        .maybeSingle();
+      return !!existing;
+    }
+
     async function indexPage(pageUrl: string, sourceSitemap?: string) {
+      if (await alreadyIndexed(pageUrl)) return;
       try {
         const html = await fetchText(pageUrl);
         let title = pageUrl;
@@ -143,18 +145,15 @@ export const submitUrl = createServerFn({ method: "POST" })
         } else {
           text = html.replace(/\s+/g, " ").trim().slice(0, 20000);
         }
-        const { error } = await supabaseAdmin.from("pages").upsert(
-          {
-            url: pageUrl,
-            title,
-            description,
-            content: text,
-            source_sitemap: sourceSitemap,
-            submitted_by: data.user_id,
-            kind: "page",
-          },
-          { onConflict: "url", ignoreDuplicates: false },
-        );
+        const { error } = await supabaseAdmin.from("pages").insert({
+          url: pageUrl,
+          title,
+          description,
+          content: text,
+          source_sitemap: sourceSitemap,
+          submitted_by: data.user_id,
+          kind: "page",
+        });
         if (!error) indexedUrls.push(pageUrl);
       } catch (e) {
         console.warn("Skip", pageUrl, e);
@@ -162,24 +161,39 @@ export const submitUrl = createServerFn({ method: "POST" })
     }
 
     if (data.kind === "file") {
-      const body = await fetchText(data.url);
-      const text = body.replace(/\s+/g, " ").trim().slice(0, 20000);
-      const { error } = await supabaseAdmin.from("pages").upsert(
-        {
-          url: data.url,
-          title: data.url,
-          description: "",
-          content: text,
-          submitted_by: data.user_id,
-          kind: "file",
-        },
-        { onConflict: "url", ignoreDuplicates: false },
-      );
+      const fileUrl = `storage://${SUBMISSIONS_BUCKET}/${data.storage_path}`;
+      if (await alreadyIndexed(fileUrl)) {
+        return { error: "This file has already been submitted." };
+      }
+      const { data: blob, error: dlErr } = await supabaseAdmin.storage
+        .from(SUBMISSIONS_BUCKET)
+        .download(data.storage_path);
+      if (dlErr || !blob) {
+        return { error: dlErr?.message || "Could not read uploaded file." };
+      }
+      const raw = await blob.text().catch(() => "");
+      let text = raw;
+      if (/<html|<!doctype/i.test(raw)) {
+        text = stripHtml(raw).text;
+      } else {
+        text = raw.replace(/\s+/g, " ").trim().slice(0, 20000);
+      }
+      const { error } = await supabaseAdmin.from("pages").insert({
+        url: fileUrl,
+        title: data.filename,
+        description: "",
+        content: text,
+        submitted_by: data.user_id,
+        kind: "file",
+      });
       if (error) return { error: error.message };
-      indexedUrls.push(data.url);
+      indexedUrls.push(fileUrl);
       rewardAmount = 50;
       reason = "Crossi Search file submission";
     } else {
+      if (await alreadyIndexed(data.url)) {
+        return { error: "This page has already been submitted." };
+      }
       await indexPage(data.url);
       const origin = new URL(data.url).origin;
       const sitemapUrl = origin + "/sitemap.xml";
@@ -193,7 +207,9 @@ export const submitUrl = createServerFn({ method: "POST" })
       } catch (e) {
         console.warn("No sitemap at", sitemapUrl, e);
       }
-      if (indexedUrls.length === 0) return { error: "Could not index the submitted page." };
+      if (indexedUrls.length === 0) {
+        return { error: "Could not index the submitted page." };
+      }
       rewardAmount = 100;
       reason = `Crossi Search page submission (${indexedUrls.length} pages)`;
     }
@@ -202,7 +218,7 @@ export const submitUrl = createServerFn({ method: "POST" })
 
     await supabaseAdmin.from("submissions").insert({
       user_id: data.user_id,
-      url: data.url,
+      url: data.kind === "file" ? data.filename : data.url,
       kind: data.kind,
       croins_awarded: rewardAmount,
     });
@@ -216,39 +232,54 @@ export const submitUrl = createServerFn({ method: "POST" })
 
 // ========== SEARCH ==========
 export const searchPages = createServerFn({ method: "POST" })
-  .inputValidator(z.object({ query: z.string().min(1).max(500) }))
+  .inputValidator(
+    z.object({
+      query: z.string().min(1).max(500),
+      kind: z.enum(["page", "file"]).optional(),
+    }),
+  )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const q = data.query.trim();
-    // Escape PostgREST `or` filter: strip commas, parens, and percent signs
     const safe = q.replace(/[,()%*]/g, " ").trim();
     const term = `%${safe}%`;
 
-    const { data: rows } = await supabaseAdmin
+    let query = supabaseAdmin
       .from("pages")
       .select("id,url,title,description,content,kind")
-      .or(
-        `title.ilike.${term},description.ilike.${term},content.ilike.${term}`,
-      )
+      .or(`title.ilike.${term},description.ilike.${term},content.ilike.${term}`)
       .limit(20);
+    if (data.kind) query = query.eq("kind", data.kind);
+
+    const { data: rows } = await query;
     const results = rows || [];
 
-    return {
-      results: results.map((r) => {
+    const out = await Promise.all(
+      results.map(async (r) => {
         const snippet =
           r.description ||
           (r.content
             ? r.content.slice(0, 240) + (r.content.length > 240 ? "…" : "")
             : "");
+        let displayUrl = r.url;
+        if (r.kind === "file" && r.url.startsWith("storage://")) {
+          const path = r.url.replace(`storage://${SUBMISSIONS_BUCKET}/`, "");
+          const { data: signed } = await supabaseAdmin.storage
+            .from(SUBMISSIONS_BUCKET)
+            .createSignedUrl(path, 3600);
+          displayUrl = signed?.signedUrl || r.url;
+        }
         return {
           id: r.id,
-          url: r.url,
+          url: displayUrl,
           title: r.title || r.url,
           snippet,
           kind: r.kind,
         };
       }),
-    };
+    );
+
+    return { results: out };
   });
 
 // ========== AI OVERVIEW ==========
@@ -300,18 +331,4 @@ export const aiOverview = createServerFn({ method: "POST" })
       console.error("AI overview failed", e);
       return { overview: "" };
     }
-  });
-
-// ========== DAILY CAP CHECK ==========
-export const getDailyCap = createServerFn({ method: "POST" })
-  .inputValidator(z.object({ user_id: z.string() }))
-  .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { count } = await supabaseAdmin
-      .from("submissions")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", data.user_id)
-      .gte("created_at", since);
-    return { used: count ?? 0, cap: DAILY_CAP };
   });
