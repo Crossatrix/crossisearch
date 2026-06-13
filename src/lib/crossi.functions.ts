@@ -40,7 +40,14 @@ function extractLocs(xml: string): string[] {
 
 async function fetchText(url: string): Promise<string> {
   const res = await fetch(url, {
-    headers: { "User-Agent": "CrossiSearchBot/1.0 (+https://crossi.search)" },
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (compatible; CrossiSearchBot/1.0; +https://crossisearch.lovable.app)",
+      Accept:
+        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+    },
+    redirect: "follow",
     signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) throw new Error(`Fetch failed ${res.status} for ${url}`);
