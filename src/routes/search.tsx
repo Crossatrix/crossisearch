@@ -5,7 +5,10 @@ import { z } from "zod";
 import { Header } from "@/components/Header";
 import { searchPages, aiOverview } from "@/lib/crossi.functions";
 
-const searchSchema = z.object({ q: z.string().catch("") });
+const searchSchema = z.object({
+  q: z.string().catch(""),
+  tab: z.enum(["web", "files"]).catch("web"),
+});
 
 export const Route = createFileRoute("/search")({
   validateSearch: searchSchema,
@@ -14,7 +17,7 @@ export const Route = createFileRoute("/search")({
       { title: "Crossi Search" },
       {
         name: "description",
-        content: "Search the Crossi community-indexed web.",
+        content: "Search the Crossi community-indexed web and files.",
       },
     ],
   }),
@@ -30,7 +33,7 @@ type Result = {
 };
 
 function SearchPage() {
-  const { q } = Route.useSearch();
+  const { q, tab } = Route.useSearch();
   const navigate = useNavigate();
   const search = useServerFn(searchPages);
   const overview = useServerFn(aiOverview);
@@ -50,10 +53,11 @@ function SearchPage() {
     }
     setLoading(true);
     setOv("");
-    search({ data: { query: q } })
+    const kind = tab === "files" ? "file" : "page";
+    search({ data: { query: q, kind } })
       .then((r) => {
         setResults(r.results);
-        if (r.results.length > 0) {
+        if (tab === "web" && r.results.length > 0) {
           setOvLoading(true);
           overview({
             data: {
@@ -66,7 +70,10 @@ function SearchPage() {
         }
       })
       .finally(() => setLoading(false));
-  }, [q, search, overview]);
+  }, [q, tab, search, overview]);
+
+  const goTab = (next: "web" | "files") =>
+    navigate({ to: "/search", search: { q, tab: next } });
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -76,9 +83,12 @@ function SearchPage() {
           onSubmit={(e) => {
             e.preventDefault();
             if (input.trim())
-              navigate({ to: "/search", search: { q: input.trim() } });
+              navigate({
+                to: "/search",
+                search: { q: input.trim(), tab },
+              });
           }}
-          className="max-w-3xl mx-auto px-6 py-4"
+          className="max-w-3xl mx-auto px-6 pt-4"
         >
           <div className="flex items-center bg-card border border-border rounded-full px-5 py-2.5 focus-within:border-primary">
             <input
@@ -89,6 +99,22 @@ function SearchPage() {
             />
           </div>
         </form>
+        <div className="max-w-3xl mx-auto px-6 pt-3 pb-0 flex gap-1">
+          {(["web", "files"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => goTab(t)}
+              className={
+                "px-4 py-2 text-sm border-b-2 -mb-px transition " +
+                (tab === t
+                  ? "border-primary text-primary font-semibold"
+                  : "border-transparent text-muted-foreground hover:text-foreground")
+              }
+            >
+              {t === "web" ? "Web" : "Files"}
+            </button>
+          ))}
+        </div>
       </div>
 
       <main className="max-w-3xl w-full mx-auto px-6 py-8 flex-1">
@@ -96,11 +122,11 @@ function SearchPage() {
 
         {!loading && results && results.length === 0 && q && (
           <div className="text-center py-16">
-            <p className="text-lg mb-2">No results for "{q}"</p>
+            <p className="text-lg mb-2">No {tab === "files" ? "files" : "results"} for "{q}"</p>
             <p className="text-muted-foreground text-sm">
               Be the first to{" "}
               <a href="/submit" className="text-primary underline">
-                submit a page
+                submit {tab === "files" ? "a file" : "a page"}
               </a>{" "}
               about this.
             </p>
@@ -109,7 +135,7 @@ function SearchPage() {
 
         {!loading && results && results.length > 0 && (
           <>
-            {(ov || ovLoading) && (
+            {tab === "web" && (ov || ovLoading) && (
               <div className="bg-card border border-border rounded-xl p-5 mb-6">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-primary">
@@ -128,30 +154,60 @@ function SearchPage() {
               </div>
             )}
 
-            <ul className="space-y-6">
-              {results.map((r) => (
-                <li key={r.id}>
-                  <a
-                    href={r.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block group"
+            {tab === "files" ? (
+              <ul className="space-y-3">
+                {results.map((r) => (
+                  <li
+                    key={r.id}
+                    className="bg-card border border-border rounded-lg p-4 flex items-center justify-between gap-4"
                   >
-                    <div className="text-xs text-muted-foreground truncate">
-                      {r.url}
+                    <div className="min-w-0 flex-1">
+                      <div className="text-base font-semibold truncate">
+                        {r.title}
+                      </div>
+                      {r.snippet && (
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                          {r.snippet}
+                        </p>
+                      )}
                     </div>
-                    <div className="text-lg text-primary group-hover:underline">
-                      {r.title}
-                    </div>
-                    {r.snippet && (
-                      <p className="text-sm text-foreground/80 mt-1">
-                        {r.snippet}
-                      </p>
-                    )}
-                  </a>
-                </li>
-              ))}
-            </ul>
+                    <a
+                      href={r.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-semibold shrink-0"
+                    >
+                      Open
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <ul className="space-y-6">
+                {results.map((r) => (
+                  <li key={r.id}>
+                    <a
+                      href={r.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block group"
+                    >
+                      <div className="text-xs text-muted-foreground truncate">
+                        {r.url}
+                      </div>
+                      <div className="text-lg text-primary group-hover:underline">
+                        {r.title}
+                      </div>
+                      {r.snippet && (
+                        <p className="text-sm text-foreground/80 mt-1">
+                          {r.snippet}
+                        </p>
+                      )}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
           </>
         )}
       </main>
