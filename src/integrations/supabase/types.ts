@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_logs: {
+        Row: {
+          action: string
+          admin_email: string
+          created_at: string
+          details: Json | null
+          id: string
+          target_id: string | null
+          target_table: string
+        }
+        Insert: {
+          action: string
+          admin_email: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          target_id?: string | null
+          target_table: string
+        }
+        Update: {
+          action?: string
+          admin_email?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          target_id?: string | null
+          target_table?: string
+        }
+        Relationships: []
+      }
       pages: {
         Row: {
           content: string | null
