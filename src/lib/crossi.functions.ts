@@ -137,13 +137,18 @@ export const submitUrl = createServerFn({ method: "POST" })
       return !!existing;
     }
 
-    async function indexPage(pageUrl: string, sourceSitemap?: string) {
+    async function indexPage(
+      pageUrl: string,
+      sourceSitemap?: string,
+      { allowStub = false }: { allowStub?: boolean } = {},
+    ) {
       if (await alreadyIndexed(pageUrl)) return;
+      let title = pageUrl;
+      let description = "";
+      let text = "";
       try {
         const html = await fetchText(pageUrl);
-        let title = pageUrl;
-        let description = "";
-        let text = html.slice(0, 20000);
+        text = html.slice(0, 20000);
         if (/<html|<!doctype/i.test(html)) {
           const parsed = stripHtml(html);
           title = parsed.title || pageUrl;
@@ -152,19 +157,28 @@ export const submitUrl = createServerFn({ method: "POST" })
         } else {
           text = html.replace(/\s+/g, " ").trim().slice(0, 20000);
         }
-        const { error } = await supabaseAdmin.from("pages").insert({
-          url: pageUrl,
-          title,
-          description,
-          content: text,
-          source_sitemap: sourceSitemap,
-          submitted_by: data.user_id,
-          kind: "page",
-        });
-        if (!error) indexedUrls.push(pageUrl);
       } catch (e) {
-        console.warn("Skip", pageUrl, e);
+        console.warn("Fetch failed", pageUrl, e);
+        if (!allowStub) return;
+        try {
+          const u = new URL(pageUrl);
+          title = u.hostname + u.pathname;
+          description = `Submitted page on ${u.hostname}`;
+          text = title;
+        } catch {
+          return;
+        }
       }
+      const { error } = await supabaseAdmin.from("pages").insert({
+        url: pageUrl,
+        title,
+        description,
+        content: text,
+        source_sitemap: sourceSitemap,
+        submitted_by: data.user_id,
+        kind: "page",
+      });
+      if (!error) indexedUrls.push(pageUrl);
     }
 
     if (data.kind === "file") {
