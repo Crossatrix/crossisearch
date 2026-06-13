@@ -215,7 +215,7 @@ export const submitUrl = createServerFn({ method: "POST" })
       if (await alreadyIndexed(data.url)) {
         return { error: "This page has already been submitted." };
       }
-      await indexPage(data.url);
+      await indexPage(data.url, undefined, { allowStub: true });
       const origin = new URL(data.url).origin;
       const sitemapUrl = origin + "/sitemap.xml";
       try {
