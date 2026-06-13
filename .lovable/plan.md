@@ -1,57 +1,26 @@
-## Crossi Search — Build Plan
+## Changes
 
-A Google-style web search where the index is built only from user-submitted sitemaps and files. Crossatrix login, croin rewards per submission (with a daily cap), AI overview via Crossi 5.1 Lite.
+### 1. File uploads (no URL required)
+- Create a public Storage bucket `submissions` for user-uploaded files.
+- On `/submit`, when type = **File**: replace the URL input with a file picker. Upload directly from the browser to the bucket using the authenticated Supabase client, then call `submitUrl` with the resulting public URL + original filename.
+- Server `submitUrl` (file branch): fetch the uploaded file, extract text (plain text / readable formats), and index with `kind = "file"`, storing the filename as the title.
+- Pages keep the current URL flow unchanged.
 
-### Stack
-- TanStack Start (existing template)
-- Lovable Cloud (Supabase) for the search index + submission tracking
-- Server functions for all external API calls (Crossatrix, Crossi AI, croin rewards, sitemap fetch/scrape)
-- Tailwind theme: bg `hsl(220 80% 12%)`, accent `hsl(45 100% 55%)`, text `hsl(0 0% 100%)`
+### 2. Separate file search
+- Add tabs on `/search`: **Web** (kind = page) and **Files** (kind = file). AI overview stays on the Web tab only.
+- `searchPages` accepts an optional `kind` filter; the Files tab renders results as a file list (filename, type, download link) instead of web snippets.
 
-### Data model (Lovable Cloud)
-- `pages` — id, url (unique), title, description, content (text), source_sitemap, submitted_by (crossatrix user_id), kind ('page'|'file'), created_at
-- `submissions` — id, user_id, url, kind, croins_awarded, created_at (drives the daily cap)
-- Postgres `tsvector` GIN index on title + content for full-text search
-- RLS: public read on `pages`; `submissions` writes only via server function (service role)
+### 3. Remove daily submission cap
+- Drop the 20/day check in `submitUrl`.
+- Remove `getDailyCap` usage and the "Today: x/20" UI from `/submit`.
 
-### Secrets (Lovable Cloud)
-- `CROSSI_AI_KEY` — Crossi 5.1 Lite public-api
-- `CROSSATRIX_API_KEY` — `x-api-key` for the croin credit endpoint
+### 4. Prevent duplicate submissions
+- Add a unique index on `pages.url` (already effectively unique via upsert; enforce with a real unique constraint).
+- Before indexing, check if the URL already exists in `pages`. If yes → return `{ error: "Already submitted" }` and award no Croins. Applies to both pages and files (file dedupe keyed on uploaded file URL, so the same file uploaded twice = duplicate).
+- For page submissions that pull in a sitemap: only count/award if at least one *new* page was indexed; skip already-indexed locs silently.
 
-### Server functions (`src/lib/*.functions.ts`)
-1. `login(email, password)` → proxies Crossatrix auth, returns `{ user, access_token }`
-2. `submitUrl({ user_id, url, kind })`
-   - Enforce daily cap (default 20/user/day) using `submissions`
-   - Sitemap: fetch URL, parse `<loc>` entries (cap ~100), fetch each, HTML→text, upsert into `pages`
-   - Page/file: fetch, extract text, upsert
-   - Reject duplicate URLs (no reward)
-   - Call Crossatrix credit endpoint with `x-api-key` (100 for page/sitemap, 50 for file)
-   - Insert `submissions` row with `croins_awarded`
-3. `search(query)` → Postgres FTS over `pages`, top 20 hits (title, url, snippet)
-4. `aiOverview(query, resultUrls)` → calls Crossi public-api with the documented prompt template
-
-### Routes
-- `/` — landing: Crossi Search wordmark + big search bar, login state top-right
-- `/search?q=…` — AI overview card on top, then result list
-- `/submit` — auth-required form: URL + type (page / sitemap / file), shows daily-cap remaining + reward
-- `/auth` — Crossatrix email/password login
-
-Auth state stored in localStorage (Crossatrix `user` + `access_token`). `/submit` redirects to `/auth` if not signed in.
-
-### UI
-- Deep navy bg, bold golden accent CTAs, white text, Google-like minimal layout
-- Header shows croin balance + email when signed in, otherwise Sign in button
-
-### Implementation order
-1. Enable Lovable Cloud; create tables, RLS, FTS index
-2. Add `CROSSI_AI_KEY` + `CROSSATRIX_API_KEY` secrets
-3. Theme tokens in `src/styles.css`
-4. Auth context + `/auth` route
-5. `/submit` route + `submitUrl` server function (sitemap parse, scrape, croin reward, daily cap)
-6. `/` landing + `/search` + `search` & `aiOverview` server functions
-7. Header with croin/user display + sign-out
-
-### Notes / limits
-- Sitemap crawl bounded (≤100 URLs/submission, simple HTML→text, no JS rendering) to stay within Worker runtime
-- "File" submissions accept a fetchable text/HTML resource; if extraction fails the URL+title are still indexed
-- Daily cap default = 20 submissions/user, easy to tune
+### Technical notes
+- Bucket: `submissions`, public read, authenticated insert (RLS on `storage.objects`).
+- Migration: `ALTER TABLE pages ADD CONSTRAINT pages_url_unique UNIQUE (url);` (safe — upsert already dedupes by url).
+- No schema change to `submissions` table; we just stop writing a row when duplicate.
+- Croin reward unchanged: 100 page / 50 file, only on first successful index.
