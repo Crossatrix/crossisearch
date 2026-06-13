@@ -3,8 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { Header } from "@/components/Header";
-import { searchPages, aiOverview, deletePage } from "@/lib/crossi.functions";
-import { useSession, isAdmin } from "@/lib/auth";
+import { searchPages, aiOverview } from "@/lib/crossi.functions";
 
 const searchSchema = z.object({ q: z.string().catch("") });
 
@@ -33,18 +32,14 @@ type Result = {
 function SearchPage() {
   const { q } = Route.useSearch();
   const navigate = useNavigate();
-  const session = useSession();
-  const admin = isAdmin(session);
   const search = useServerFn(searchPages);
   const overview = useServerFn(aiOverview);
-  const delPage = useServerFn(deletePage);
 
   const [input, setInput] = useState(q);
   const [results, setResults] = useState<Result[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [ov, setOv] = useState<string>("");
   const [ovLoading, setOvLoading] = useState(false);
-  const [deleting, setDeleting] = useState<string | null>(null);
 
   useEffect(() => {
     setInput(q);
@@ -72,29 +67,6 @@ function SearchPage() {
       })
       .finally(() => setLoading(false));
   }, [q, search, overview]);
-
-  const handleDelete = async (pageId: string, pageUrl: string) => {
-    if (!confirm(`Delete this entry?\n\n${pageUrl}`)) return;
-    
-    setDeleting(pageId);
-    try {
-      const result = await delPage({ 
-        data: { 
-          page_id: pageId, 
-          user_email: session!.user.email 
-        } 
-      });
-      
-      if (result.error) {
-        alert(result.error);
-      } else {
-        // Remove from results
-        setResults(prev => prev?.filter(r => r.id !== pageId) ?? null);
-      }
-    } finally {
-      setDeleting(null);
-    }
-  };
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -156,22 +128,14 @@ function SearchPage() {
               </div>
             )}
 
-            {admin && (
-              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-4 py-2 mb-4">
-                <p className="text-yellow-600 text-xs font-medium">
-                  🛡️ Admin Mode — You can delete entries
-                </p>
-              </div>
-            )}
-
             <ul className="space-y-6">
               {results.map((r) => (
-                <li key={r.id} className="group relative">
+                <li key={r.id}>
                   <a
                     href={r.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block"
+                    className="block group"
                   >
                     <div className="text-xs text-muted-foreground truncate">
                       {r.url}
@@ -185,19 +149,6 @@ function SearchPage() {
                       </p>
                     )}
                   </a>
-                  {admin && (
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleDelete(r.id, r.url);
-                      }}
-                      disabled={deleting === r.id}
-                      className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-md hover:bg-red-600 disabled:opacity-50"
-                    >
-                      {deleting === r.id ? "Deleting..." : "Delete"}
-                    </button>
-                  )}
                 </li>
               ))}
             </ul>

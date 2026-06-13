@@ -1,5 +1,5 @@
 // Crossatrix auth stored in localStorage.
-export type CrossatrixUser = { id: string; email: string; admin?: boolean };
+export type CrossatrixUser = { id: string; email: string };
 export type CrossatrixSession = { user: CrossatrixUser; access_token: string };
 
 const KEY = "crossi_session";
@@ -40,9 +40,4 @@ export function useSession(): CrossatrixSession | null {
     };
   }, []);
   return s;
-}
-
-export function isAdmin(session: CrossatrixSession | null): boolean {
-  if (!session) return false;
-  return session.user.email === "Cross.a.trix.owner@hotmail.com";
 }
