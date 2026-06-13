@@ -1,18 +1,19 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Header } from "@/components/Header";
 import { useSession } from "@/lib/auth";
-import { submitUrl, getDailyCap } from "@/lib/crossi.functions";
+import { submitUrl } from "@/lib/crossi.functions";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/submit")({
   head: () => ({
     meta: [
-      { title: "Submit a page — Crossi Search" },
+      { title: "Submit to Crossi Search" },
       {
         name: "description",
         content:
-          "Submit a sitemap, page, or file to the Crossi Search index. Earn Croins for every accepted submission.",
+          "Submit a page or upload a file to the Crossi Search index. Earn Croins for each new submission.",
       },
     ],
   }),
@@ -23,23 +24,13 @@ function SubmitPage() {
   const session = useSession();
   const navigate = useNavigate();
   const submit = useServerFn(submitUrl);
-  const cap = useServerFn(getDailyCap);
 
   const [url, setUrl] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [kind, setKind] = useState<"page" | "file">("page");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [used, setUsed] = useState<number | null>(null);
-  const [capN, setCapN] = useState<number>(20);
-
-  useEffect(() => {
-    if (!session) return;
-    cap({ data: { user_id: session.user.id } }).then((r) => {
-      setUsed(r.used);
-      setCapN(r.cap);
-    });
-  }, [session, cap]);
 
   if (!session) {
     return (
@@ -69,18 +60,48 @@ function SubmitPage() {
     setMsg(null);
     setErr(null);
     try {
-      const res = await submit({
-        data: { user_id: session!.user.id, url, kind },
-      });
-      if ("error" in res && res.error) {
-        setErr(res.error);
-      } else if ("success" in res) {
-        setMsg(
-          `Indexed ${res.indexed} ${res.indexed === 1 ? "item" : "items"}. You earned ${res.croins} Croins.`,
-        );
-        setUrl("");
-        const cc = await cap({ data: { user_id: session!.user.id } });
-        setUsed(cc.used);
+      if (kind === "file") {
+        if (!file) {
+          setErr("Choose a file to upload.");
+          return;
+        }
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const path = `${session!.user.id}/${Date.now()}-${safeName}`;
+        const { error: upErr } = await supabase.storage
+          .from("submissions")
+          .upload(path, file, { upsert: false });
+        if (upErr) {
+          setErr(upErr.message);
+          return;
+        }
+        const res = await submit({
+          data: {
+            kind: "file",
+            user_id: session!.user.id,
+            storage_path: path,
+            filename: file.name,
+          },
+        });
+        if ("error" in res && res.error) {
+          setErr(res.error);
+        } else if ("success" in res) {
+          setMsg(`File indexed. You earned ${res.croins} Croins.`);
+          setFile(null);
+          (document.getElementById("file-input") as HTMLInputElement | null)?.value &&
+            ((document.getElementById("file-input") as HTMLInputElement).value = "");
+        }
+      } else {
+        const res = await submit({
+          data: { kind: "page", user_id: session!.user.id, url },
+        });
+        if ("error" in res && res.error) {
+          setErr(res.error);
+        } else if ("success" in res) {
+          setMsg(
+            `Indexed ${res.indexed} ${res.indexed === 1 ? "page" : "pages"}. You earned ${res.croins} Croins.`,
+          );
+          setUrl("");
+        }
       }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Submission failed");
@@ -100,7 +121,7 @@ function SubmitPage() {
           <div>
             <h1 className="text-2xl font-bold">Submit to Crossi Search</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Add a page or file URL. Pages automatically pull in the domain's sitemap.xml.
+              Add a page URL (we'll auto-pull its sitemap.xml) or upload a file directly.
             </p>
           </div>
 
@@ -125,35 +146,41 @@ function SubmitPage() {
             </div>
           </div>
 
-          <div>
-            <label htmlFor="url" className="block text-sm mb-1.5">
-              URL
-            </label>
-            <input
-              id="url"
-              type="url"
-              required
-              placeholder={
-                kind === "file"
-                  ? "https://example.com/doc.txt"
-                  : "https://example.com/page"
-              }
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              className="w-full bg-input border border-border rounded-md px-3 py-2 outline-none focus:border-primary"
-            />
-          </div>
+          {kind === "page" ? (
+            <div>
+              <label htmlFor="url" className="block text-sm mb-1.5">
+                URL
+              </label>
+              <input
+                id="url"
+                type="url"
+                required
+                placeholder="https://example.com/page"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                className="w-full bg-input border border-border rounded-md px-3 py-2 outline-none focus:border-primary"
+              />
+            </div>
+          ) : (
+            <div>
+              <label htmlFor="file-input" className="block text-sm mb-1.5">
+                File
+              </label>
+              <input
+                id="file-input"
+                type="file"
+                required
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                className="w-full bg-input border border-border rounded-md px-3 py-2 outline-none focus:border-primary file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:bg-primary file:text-primary-foreground file:font-semibold"
+              />
+            </div>
+          )}
 
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">
               Reward:{" "}
               <span className="text-primary font-semibold">{reward} Croins</span>
             </span>
-            {used !== null && (
-              <span className="text-muted-foreground">
-                Today: {used}/{capN}
-              </span>
-            )}
           </div>
 
           {err && <p className="text-destructive text-sm">{err}</p>}
@@ -161,10 +188,10 @@ function SubmitPage() {
 
           <button
             type="submit"
-            disabled={loading || (used !== null && used >= capN)}
+            disabled={loading}
             className="w-full py-2.5 rounded-md bg-primary text-primary-foreground font-semibold hover:opacity-90 transition disabled:opacity-60"
           >
-            {loading ? "Indexing…" : "Submit"}
+            {loading ? "Submitting…" : "Submit"}
           </button>
         </form>
       </main>
