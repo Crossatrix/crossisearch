@@ -112,7 +112,7 @@ function AdminPage() {
       if ("error" in r && r.error) {
         setErr(r.error);
       } else if ("key" in r) {
-        setNewKey(r.key);
+        setNewKey(r.key ?? null);
         setLabel("");
         const refreshed = await listKeys({ data: { user_id: session!.user.id } });
         if ("keys" in refreshed) setKeys(refreshed.keys as KeyRow[]);
