@@ -27,6 +27,7 @@ function SubmitPage() {
 
   const [url, setUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [customName, setCustomName] = useState("");
   const [kind, setKind] = useState<"page" | "file">("page");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -65,11 +66,18 @@ function SubmitPage() {
           setErr("Choose a file to upload.");
           return;
         }
-        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const originalExt = file.name.includes(".")
+          ? "." + file.name.split(".").pop()
+          : "";
+        let displayName = customName.trim() || file.name;
+        if (customName.trim() && !displayName.includes(".")) {
+          displayName += originalExt;
+        }
+        const safeName = displayName.replace(/[^a-zA-Z0-9._-]/g, "_");
         const path = `${session!.user.id}/${Date.now()}-${safeName}`;
         const { error: upErr } = await supabase.storage
           .from("submissions")
-          .upload(path, file, { upsert: false });
+          .upload(path, file, { upsert: false, contentType: file.type });
         if (upErr) {
           setErr(upErr.message);
           return;
@@ -79,7 +87,8 @@ function SubmitPage() {
             kind: "file",
             user_id: session!.user.id,
             storage_path: path,
-            filename: file.name,
+            filename: displayName,
+            mime_type: file.type || undefined,
           },
         });
         if ("error" in res && res.error) {
@@ -87,8 +96,9 @@ function SubmitPage() {
         } else if ("success" in res) {
           setMsg(`File indexed. You earned ${res.croins} Croins.`);
           setFile(null);
-          (document.getElementById("file-input") as HTMLInputElement | null)?.value &&
-            ((document.getElementById("file-input") as HTMLInputElement).value = "");
+          setCustomName("");
+          const el = document.getElementById("file-input") as HTMLInputElement | null;
+          if (el) el.value = "";
         }
       } else {
         const res = await submit({
@@ -162,18 +172,33 @@ function SubmitPage() {
               />
             </div>
           ) : (
-            <div>
-              <label htmlFor="file-input" className="block text-sm mb-1.5">
-                File
-              </label>
-              <input
-                id="file-input"
-                type="file"
-                required
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                className="w-full bg-input border border-border rounded-md px-3 py-2 outline-none focus:border-primary file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:bg-primary file:text-primary-foreground file:font-semibold"
-              />
-            </div>
+            <>
+              <div>
+                <label htmlFor="file-input" className="block text-sm mb-1.5">
+                  File
+                </label>
+                <input
+                  id="file-input"
+                  type="file"
+                  required
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  className="w-full bg-input border border-border rounded-md px-3 py-2 outline-none focus:border-primary file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:bg-primary file:text-primary-foreground file:font-semibold"
+                />
+              </div>
+              <div>
+                <label htmlFor="custom-name" className="block text-sm mb-1.5">
+                  Display name <span className="text-muted-foreground">(optional)</span>
+                </label>
+                <input
+                  id="custom-name"
+                  type="text"
+                  placeholder={file?.name || "Leave blank to use the original filename"}
+                  value={customName}
+                  onChange={(e) => setCustomName(e.target.value)}
+                  className="w-full bg-input border border-border rounded-md px-3 py-2 outline-none focus:border-primary"
+                />
+              </div>
+            </>
           )}
 
           <div className="flex items-center justify-between text-sm">
