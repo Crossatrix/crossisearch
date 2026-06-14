@@ -12,7 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SubmitRouteImport } from './routes/submit'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiPublicSubmitRouteImport } from './routes/api/public/submit'
 
 const SubmitRoute = SubmitRouteImport.update({
   id: '/submit',
@@ -29,44 +31,75 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicSubmitRoute = ApiPublicSubmitRouteImport.update({
+  id: '/api/public/submit',
+  path: '/api/public/submit',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
   '/search': typeof SearchRoute
   '/submit': typeof SubmitRoute
+  '/api/public/submit': typeof ApiPublicSubmitRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
   '/search': typeof SearchRoute
   '/submit': typeof SubmitRoute
+  '/api/public/submit': typeof ApiPublicSubmitRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
   '/search': typeof SearchRoute
   '/submit': typeof SubmitRoute
+  '/api/public/submit': typeof ApiPublicSubmitRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/search' | '/submit'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/auth'
+    | '/search'
+    | '/submit'
+    | '/api/public/submit'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/search' | '/submit'
-  id: '__root__' | '/' | '/auth' | '/search' | '/submit'
+  to: '/' | '/admin' | '/auth' | '/search' | '/submit' | '/api/public/submit'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/auth'
+    | '/search'
+    | '/submit'
+    | '/api/public/submit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRoute
   AuthRoute: typeof AuthRoute
   SearchRoute: typeof SearchRoute
   SubmitRoute: typeof SubmitRoute
+  ApiPublicSubmitRoute: typeof ApiPublicSubmitRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -92,6 +125,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -99,25 +139,24 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/submit': {
+      id: '/api/public/submit'
+      path: '/api/public/submit'
+      fullPath: '/api/public/submit'
+      preLoaderRoute: typeof ApiPublicSubmitRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRoute,
   AuthRoute: AuthRoute,
   SearchRoute: SearchRoute,
   SubmitRoute: SubmitRoute,
+  ApiPublicSubmitRoute: ApiPublicSubmitRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

@@ -3,7 +3,13 @@ import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { Header } from "@/components/Header";
-import { searchPages, aiOverview } from "@/lib/crossi.functions";
+import {
+  searchPages,
+  aiOverview,
+  isAdmin,
+  deletePage,
+} from "@/lib/crossi.functions";
+import { useSession } from "@/lib/auth";
 
 const searchSchema = z.object({
   q: z.string().catch(""),
@@ -30,19 +36,33 @@ type Result = {
   title: string;
   snippet: string;
   kind: string;
+  mime_type: string | null;
+  file_kind: string | null;
 };
 
 function SearchPage() {
   const { q, tab } = Route.useSearch();
   const navigate = useNavigate();
+  const session = useSession();
   const search = useServerFn(searchPages);
   const overview = useServerFn(aiOverview);
+  const checkAdmin = useServerFn(isAdmin);
+  const del = useServerFn(deletePage);
 
   const [input, setInput] = useState(q);
   const [results, setResults] = useState<Result[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [ov, setOv] = useState<string>("");
   const [ovLoading, setOvLoading] = useState(false);
+  const [admin, setAdmin] = useState(false);
+
+  useEffect(() => {
+    if (!session) {
+      setAdmin(false);
+      return;
+    }
+    checkAdmin({ data: { user_id: session.user.id } }).then((r) => setAdmin(r.admin));
+  }, [session, checkAdmin]);
 
   useEffect(() => {
     setInput(q);
@@ -56,7 +76,7 @@ function SearchPage() {
     const kind = tab === "files" ? "file" : "page";
     search({ data: { query: q, kind } })
       .then((r) => {
-        setResults(r.results);
+        setResults(r.results as Result[]);
         if (tab === "web" && r.results.length > 0) {
           setOvLoading(true);
           overview({
@@ -75,6 +95,20 @@ function SearchPage() {
   const goTab = (next: "web" | "files") =>
     navigate({ to: "/search", search: { q, tab: next } });
 
+  async function onDelete(id: string) {
+    if (!session) return;
+    if (!confirm("Delete this result?")) return;
+    const r = await del({ data: { user_id: session.user.id, page_id: id } });
+    if ("error" in r && r.error) {
+      alert(r.error);
+      return;
+    }
+    setResults((prev) => (prev ? prev.filter((x) => x.id !== id) : prev));
+  }
+
+  const imageResults = (results || []).filter((r) => r.file_kind === "image");
+  const otherFileResults = (results || []).filter((r) => r.file_kind !== "image");
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
@@ -83,10 +117,7 @@ function SearchPage() {
           onSubmit={(e) => {
             e.preventDefault();
             if (input.trim())
-              navigate({
-                to: "/search",
-                search: { q: input.trim(), tab },
-              });
+              navigate({ to: "/search", search: { q: input.trim(), tab } });
           }}
           className="max-w-3xl mx-auto px-6 pt-4"
         >
@@ -122,7 +153,9 @@ function SearchPage() {
 
         {!loading && results && results.length === 0 && q && (
           <div className="text-center py-16">
-            <p className="text-lg mb-2">No {tab === "files" ? "files" : "results"} for "{q}"</p>
+            <p className="text-lg mb-2">
+              No {tab === "files" ? "files" : "results"} for "{q}"
+            </p>
             <p className="text-muted-foreground text-sm">
               Be the first to{" "}
               <a href="/submit" className="text-primary underline">
@@ -143,54 +176,103 @@ function SearchPage() {
                   </span>
                 </div>
                 {ovLoading ? (
-                  <p className="text-muted-foreground text-sm">
-                    Generating overview…
-                  </p>
+                  <p className="text-muted-foreground text-sm">Generating overview…</p>
                 ) : (
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                    {ov}
-                  </p>
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{ov}</p>
                 )}
               </div>
             )}
 
             {tab === "files" ? (
-              <ul className="space-y-3">
-                {results.map((r) => (
-                  <li
-                    key={r.id}
-                    className="bg-card border border-border rounded-lg p-4 flex items-center justify-between gap-4"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="text-base font-semibold truncate">
-                        {r.title}
-                      </div>
-                      {r.snippet && (
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                          {r.snippet}
-                        </p>
-                      )}
+              <div className="space-y-8">
+                {imageResults.length > 0 && (
+                  <div>
+                    <h2 className="text-xs uppercase tracking-wider text-muted-foreground mb-3">
+                      Images
+                    </h2>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {imageResults.map((r) => (
+                        <div
+                          key={r.id}
+                          className="bg-card border border-border rounded-lg overflow-hidden group relative"
+                        >
+                          <a href={r.url} target="_blank" rel="noopener noreferrer">
+                            <img
+                              src={r.url}
+                              alt={r.title}
+                              loading="lazy"
+                              className="w-full aspect-square object-cover"
+                            />
+                          </a>
+                          <div className="p-2 text-xs truncate" title={r.title}>
+                            {r.title}
+                          </div>
+                          {admin && (
+                            <button
+                              onClick={() => onDelete(r.id)}
+                              className="absolute top-1.5 right-1.5 text-xs px-2 py-0.5 rounded bg-destructive/90 text-destructive-foreground opacity-0 group-hover:opacity-100 transition"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                    <a
-                      href={r.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-semibold shrink-0"
-                    >
-                      Open
-                    </a>
-                  </li>
-                ))}
-              </ul>
+                  </div>
+                )}
+
+                {otherFileResults.length > 0 && (
+                  <div>
+                    <h2 className="text-xs uppercase tracking-wider text-muted-foreground mb-3">
+                      Files
+                    </h2>
+                    <ul className="space-y-3">
+                      {otherFileResults.map((r) => (
+                        <li
+                          key={r.id}
+                          className="bg-card border border-border rounded-lg p-4 flex items-center justify-between gap-4"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="text-base font-semibold truncate">
+                              {r.title}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              {r.mime_type || r.file_kind || "file"}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <a
+                              href={r.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-semibold"
+                            >
+                              Download
+                            </a>
+                            {admin && (
+                              <button
+                                onClick={() => onDelete(r.id)}
+                                className="px-3 py-1.5 rounded-md text-sm border border-destructive/50 text-destructive hover:bg-destructive/10"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
             ) : (
               <ul className="space-y-6">
                 {results.map((r) => (
-                  <li key={r.id}>
+                  <li key={r.id} className="group">
                     <a
                       href={r.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="block group"
+                      className="block"
                     >
                       <div className="text-xs text-muted-foreground truncate">
                         {r.url}
@@ -199,11 +281,17 @@ function SearchPage() {
                         {r.title}
                       </div>
                       {r.snippet && (
-                        <p className="text-sm text-foreground/80 mt-1">
-                          {r.snippet}
-                        </p>
+                        <p className="text-sm text-foreground/80 mt-1">{r.snippet}</p>
                       )}
                     </a>
+                    {admin && (
+                      <button
+                        onClick={() => onDelete(r.id)}
+                        className="mt-1 text-xs text-destructive hover:underline"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>

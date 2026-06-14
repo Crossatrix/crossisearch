@@ -1,9 +1,22 @@
 import { Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { useSession, clearSession } from "@/lib/auth";
+import { isAdmin } from "@/lib/crossi.functions";
 
 export function Header() {
   const session = useSession();
   const navigate = useNavigate();
+  const checkAdmin = useServerFn(isAdmin);
+  const [admin, setAdmin] = useState(false);
+
+  useEffect(() => {
+    if (!session) {
+      setAdmin(false);
+      return;
+    }
+    checkAdmin({ data: { user_id: session.user.id } }).then((r) => setAdmin(r.admin));
+  }, [session, checkAdmin]);
 
   return (
     <header className="w-full border-b border-border">
@@ -19,6 +32,14 @@ export function Header() {
           >
             Submit
           </Link>
+          {admin && (
+            <Link
+              to="/admin"
+              className="px-3 py-1.5 rounded-md hover:bg-secondary transition"
+            >
+              Admin
+            </Link>
+          )}
           {session ? (
             <>
               <span className="hidden sm:inline text-muted-foreground">
