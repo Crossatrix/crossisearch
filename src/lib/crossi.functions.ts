@@ -334,16 +334,66 @@ export const searchPages = createServerFn({ method: "POST" })
 
     let query = supabaseAdmin
       .from("pages")
-      .select("id,url,title,description,content,kind,mime_type,file_kind,storage_path")
-      .or(`title.ilike.${term},description.ilike.${term},content.ilike.${term}`)
-      .limit(30);
+      .select("id,url,title,description,content,kind,mime_type,file_kind,storage_path,created_at")
+      .or(`title.ilike.${term},description.ilike.${term},content.ilike.${term},url.ilike.${term}`)
+      .limit(100);
     if (data.kind) query = query.eq("kind", data.kind);
 
     const { data: rows } = await query;
     const results = rows || [];
 
+    const fullQ = q.toLowerCase();
+    const terms = fullQ.split(/\s+/).filter(Boolean);
+    const now = Date.now();
+    const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    const scoreRow = (r: (typeof results)[number]) => {
+      const title = (r.title || "").toLowerCase();
+      const desc = (r.description || "").toLowerCase();
+      const content = (r.content || "").toLowerCase();
+      const url = (r.url || "").toLowerCase();
+      let host = "";
+      try {
+        host = new URL(r.url).hostname.toLowerCase().replace(/^www\./, "");
+      } catch {
+        host = "";
+      }
+      const hostBase = host.includes(".") ? host.split(".").slice(0, -1).join(".") : host;
+
+      let score = 0;
+      for (const t of terms) {
+        if (!t) continue;
+        if (host === t || hostBase === t) score += 1000;
+        else if (host.startsWith(t + ".") || host.endsWith("." + t)) score += 500;
+        else if (host.includes(t)) score += 300;
+        if (url.includes(t)) score += 100;
+
+        if (title === t) score += 400;
+        else if (title.startsWith(t)) score += 250;
+        else if (new RegExp(`\\b${esc(t)}\\b`).test(title)) score += 150;
+        else if (title.includes(t)) score += 60;
+
+        if (desc.includes(t)) score += 30;
+        if (content.includes(t)) score += 10;
+      }
+      if (title === fullQ) score += 300;
+      if (terms.length > 1 && terms.every((t) => title.includes(t))) score += 150;
+
+      const createdAt = r.created_at ? new Date(r.created_at).getTime() : 0;
+      const ageDays = (now - createdAt) / (1000 * 60 * 60 * 24);
+      score += Math.max(0, 5 - ageDays / 30);
+
+      return score;
+    };
+
+    const ranked = results
+      .map((r) => ({ r, s: scoreRow(r) }))
+      .sort((a, b) => b.s - a.s)
+      .slice(0, 30)
+      .map((x) => x.r);
+
     const out = await Promise.all(
-      results.map(async (r) => {
+      ranked.map(async (r) => {
         const snippet =
           r.description ||
           (r.content
