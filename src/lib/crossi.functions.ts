@@ -332,15 +332,26 @@ export const searchPages = createServerFn({ method: "POST" })
     const safe = q.replace(/[,()%*]/g, " ").trim();
     const term = `%${safe}%`;
 
-    let query = supabaseAdmin
-      .from("pages")
-      .select("id,url,title,description,content,kind,mime_type,file_kind,storage_path,created_at")
-      .or(`title.ilike.${term},description.ilike.${term},content.ilike.${term},url.ilike.${term}`)
-      .limit(100);
-    if (data.kind) query = query.eq("kind", data.kind);
+    const baseSelect = "id,url,title,description,content,kind,mime_type,file_kind,storage_path,created_at";
+    const buildQuery = (filter: string) => {
+      let qb = supabaseAdmin.from("pages").select(baseSelect).or(filter).limit(100);
+      if (data.kind) qb = qb.eq("kind", data.kind);
+      return qb;
+    };
 
-    const { data: rows } = await query;
-    const results = rows || [];
+    // Prioritize title/url matches (always included), then add content matches
+    const [titleUrlRes, contentRes] = await Promise.all([
+      buildQuery(`title.ilike.${term},url.ilike.${term},description.ilike.${term}`),
+      buildQuery(`content.ilike.${term}`),
+    ]);
+
+    const seen = new Set<string>();
+    const results: NonNullable<typeof titleUrlRes.data> = [];
+    for (const r of [...(titleUrlRes.data || []), ...(contentRes.data || [])]) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      results.push(r);
+    }
 
     const fullQ = q.toLowerCase();
     const terms = fullQ.split(/\s+/).filter(Boolean);
