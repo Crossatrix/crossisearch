@@ -333,7 +333,7 @@ export const searchPages = createServerFn({ method: "POST" })
     // Fuzzy + fast: pg_trgm-backed RPC ranks by similarity (handles typos)
     const { data: rpcRows, error } = await supabaseAdmin.rpc("search_pages_fuzzy", {
       q,
-      kind_filter: data.kind ?? null,
+      kind_filter: data.kind ?? undefined,
       max_results: 60,
     });
 
