@@ -262,61 +262,67 @@ export const submitUrl = createServerFn({ method: "POST" })
     ]),
   )
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    if (data.kind === "file") {
-      const r = await indexFileFromStorage(
-        data.storage_path,
-        data.filename,
-        data.mime_type ?? null,
-        data.user_id,
-      );
-      if (!r.ok) return { error: r.error || "Submission failed" };
-      await awardCroins(data.user_id, 50, "Crossi Search file submission");
+      if (data.kind === "file") {
+        const r = await indexFileFromStorage(
+          data.storage_path,
+          data.filename,
+          data.mime_type ?? null,
+          data.user_id,
+        );
+        if (!r.ok) return { error: r.error || "Submission failed" };
+        await awardCroins(data.user_id, 50, "Crossi Search file submission");
+        await supabaseAdmin.from("submissions").insert({
+          user_id: data.user_id,
+          url: data.filename,
+          kind: "file",
+          croins_awarded: 50,
+        });
+        return { success: true, indexed: 1, croins: 50 };
+      }
+
+      if (await alreadyIndexed(data.url)) {
+        return { error: "This page has already been submitted." };
+      }
+      // Ping check — reject if site doesn't exist
+      const reachable = await pingUrl(data.url);
+      if (!reachable) {
+        return { error: "This site doesn't seem to exist or isn't reachable." };
+      }
+
+      let indexed = 0;
+      if (await indexPage(data.url, data.user_id, undefined, { allowStub: true })) indexed++;
+      try {
+        const origin = new URL(data.url).origin;
+        const sitemapUrl = origin + "/sitemap.xml";
+        const xml = await fetchText(sitemapUrl);
+        const locs = extractLocs(xml);
+        for (const loc of locs) {
+          if (loc === data.url) continue;
+          if (await indexPage(loc, data.user_id, sitemapUrl)) indexed++;
+        }
+      } catch {
+        /* no sitemap — ok */
+      }
+
+      if (indexed === 0) return { error: "Could not index the submitted page." };
+
+      await awardCroins(data.user_id, 100, `Crossi Search page submission (${indexed} pages)`);
       await supabaseAdmin.from("submissions").insert({
         user_id: data.user_id,
-        url: data.filename,
-        kind: "file",
-        croins_awarded: 50,
+        url: data.url,
+        kind: "page",
+        croins_awarded: 100,
       });
-      return { success: true, indexed: 1, croins: 50 };
+      return { success: true, indexed, croins: 100 };
+    } catch (e) {
+      console.error("submitUrl failed", e);
+      return { error: e instanceof Error ? e.message : "Submission failed" };
     }
-
-    if (await alreadyIndexed(data.url)) {
-      return { error: "This page has already been submitted." };
-    }
-    // Ping check — reject if site doesn't exist
-    const reachable = await pingUrl(data.url);
-    if (!reachable) {
-      return { error: "This site doesn't seem to exist or isn't reachable." };
-    }
-
-    let indexed = 0;
-    if (await indexPage(data.url, data.user_id, undefined, { allowStub: true })) indexed++;
-    try {
-      const origin = new URL(data.url).origin;
-      const sitemapUrl = origin + "/sitemap.xml";
-      const xml = await fetchText(sitemapUrl);
-      const locs = extractLocs(xml);
-      for (const loc of locs) {
-        if (loc === data.url) continue;
-        if (await indexPage(loc, data.user_id, sitemapUrl)) indexed++;
-      }
-    } catch {
-      /* no sitemap — ok */
-    }
-
-    if (indexed === 0) return { error: "Could not index the submitted page." };
-
-    await awardCroins(data.user_id, 100, `Crossi Search page submission (${indexed} pages)`);
-    await supabaseAdmin.from("submissions").insert({
-      user_id: data.user_id,
-      url: data.url,
-      kind: "page",
-      croins_awarded: 100,
-    });
-    return { success: true, indexed, croins: 100 };
   });
+
 
 // ========== SEARCH ==========
 export const searchPages = createServerFn({ method: "POST" })
@@ -328,12 +334,13 @@ export const searchPages = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    // Strip emojis, punctuation (.,()), and collapse whitespace
+    // Strip emojis, punctuation (.,()), hyphens/underscores, and collapse whitespace
     const q = data.query
       .replace(/\p{Extended_Pictographic}/gu, " ")
-      .replace(/[.,()]/g, " ")
+      .replace(/[.,()\-_]/g, " ")
       .replace(/\s+/g, " ")
       .trim();
+
 
     // Fuzzy + fast: pg_trgm-backed RPC ranks by similarity (handles typos)
     const { data: rpcRows, error } = await supabaseAdmin.rpc("search_pages_fuzzy", {
