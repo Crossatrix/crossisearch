@@ -194,6 +194,24 @@ export type Database = {
         }
         Returns: boolean
       }
+      search_pages_fuzzy: {
+        Args: { kind_filter?: string; max_results?: number; q: string }
+        Returns: {
+          content: string
+          created_at: string
+          description: string
+          file_kind: string
+          id: string
+          kind: string
+          mime_type: string
+          score: number
+          storage_path: string
+          title: string
+          url: string
+        }[]
+      }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       app_role: "admin" | "user"
