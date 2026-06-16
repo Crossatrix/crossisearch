@@ -328,12 +328,13 @@ export const searchPages = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    // Strip emojis, punctuation (.,()), and collapse whitespace
+    // Strip emojis, punctuation (.,()), hyphens/underscores, and collapse whitespace
     const q = data.query
       .replace(/\p{Extended_Pictographic}/gu, " ")
-      .replace(/[.,()]/g, " ")
+      .replace(/[.,()\-_]/g, " ")
       .replace(/\s+/g, " ")
       .trim();
+
 
     // Fuzzy + fast: pg_trgm-backed RPC ranks by similarity (handles typos)
     const { data: rpcRows, error } = await supabaseAdmin.rpc("search_pages_fuzzy", {
