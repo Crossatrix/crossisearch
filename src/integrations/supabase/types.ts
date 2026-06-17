@@ -187,6 +187,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      crossi_normalize_search_text: { Args: { input: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
