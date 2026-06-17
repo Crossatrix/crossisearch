@@ -406,7 +406,8 @@ export const searchPages = createServerFn({ method: "POST" })
     const out = await Promise.all(
       ranked.map(async (r) => {
         const snippet =
-          r.description || (r.content ? r.content.slice(0, 240) + (r.content.length > 240 ? "…" : "") : "");
+          r.description ||
+          (r.content ? r.content.slice(0, 240) + (r.content.length > 240 ? "…" : "") : "");
         let displayUrl = r.url;
         const storagePath = (r as { storage_path?: string }).storage_path;
         if (r.kind === "file" && (storagePath || r.url.startsWith("storage://"))) {
