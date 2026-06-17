@@ -331,7 +331,6 @@ export const submitUrl = createServerFn({ method: "POST" })
     }
   });
 
-
 // ========== SEARCH ==========
 export const searchPages = createServerFn({ method: "POST" })
   .inputValidator(
@@ -349,7 +348,6 @@ export const searchPages = createServerFn({ method: "POST" })
       .replace(/[^\p{Letter}\p{Number}\s]/gu, "")
       .replace(/\s+/g, " ")
       .trim();
-
 
     // Fuzzy + fast: pg_trgm-backed RPC ranks by similarity (handles typos)
     const { data: rpcRows, error } = await supabaseAdmin.rpc("search_pages_fuzzy", {
@@ -405,14 +403,10 @@ export const searchPages = createServerFn({ method: "POST" })
       .slice(0, 30)
       .map((x) => x.r);
 
-
     const out = await Promise.all(
       ranked.map(async (r) => {
         const snippet =
-          r.description ||
-          (r.content
-            ? r.content.slice(0, 240) + (r.content.length > 240 ? "…" : "")
-            : "");
+          r.description || (r.content ? r.content.slice(0, 240) + (r.content.length > 240 ? "…" : "") : "");
         let displayUrl = r.url;
         const storagePath = (r as { storage_path?: string }).storage_path;
         if (r.kind === "file" && (storagePath || r.url.startsWith("storage://"))) {
