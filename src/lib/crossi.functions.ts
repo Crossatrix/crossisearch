@@ -334,10 +334,11 @@ export const searchPages = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    // Strip emojis, punctuation (.,()), hyphens/underscores, and collapse whitespace
+    // Match database normalization: ignore emojis, punctuation, hyphens, underscores, etc.
     const q = data.query
-      .replace(/\p{Extended_Pictographic}/gu, " ")
-      .replace(/[.,()\-_]/g, " ")
+      .toLowerCase()
+      .replace(/\p{Extended_Pictographic}/gu, "")
+      .replace(/[^\p{Letter}\p{Number}\s]/gu, "")
       .replace(/\s+/g, " ")
       .trim();
 
@@ -365,18 +366,10 @@ export const searchPages = createServerFn({ method: "POST" })
 
     let results: Row[] = (rpcRows as Row[] | null) ?? [];
 
-    // Fallback: if RPC fails or returns nothing, do a quick ilike pass on title/url
-    if ((error || results.length === 0) && q.length > 0) {
-      const safe = q.replace(/[,()%*]/g, " ").trim();
-      const term = `%${safe}%`;
-      let qb = supabaseAdmin
-        .from("pages")
-        .select("id,url,title,description,content,kind,mime_type,file_kind,storage_path,created_at")
-        .or(`title.ilike.${term},url.ilike.${term},description.ilike.${term}`)
-        .limit(30);
-      if (data.kind) qb = qb.eq("kind", data.kind);
-      const { data: rows } = await qb;
-      results = ((rows as Omit<Row, "score">[] | null) ?? []).map((r) => ({ ...r, score: 0.5 }));
+    // Avoid slow unindexed fallback scans if the database RPC fails.
+    if (error) {
+      console.error("search_pages_fuzzy failed", error);
+      results = [];
     }
 
     // Light JS re-rank: boost exact hostname / title matches
