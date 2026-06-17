@@ -1,8 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-const CROSSATRIX_AUTH_URL =
-  "https://digjxtmzafzcgytgcwmb.supabase.co/functions/v1/crossatrix-auth";
+const CROSSATRIX_AUTH_URL = "https://digjxtmzafzcgytgcwmb.supabase.co/functions/v1/crossatrix-auth";
 const CROSSATRIX_CROIN_URL =
   "https://digjxtmzafzcgytgcwmb.supabase.co/functions/v1/crossatrix-auth";
 
@@ -10,7 +9,19 @@ const SITEMAP_PAGE_LIMIT = 80;
 export const SUBMISSIONS_BUCKET = "submissions";
 
 const IMAGE_EXT = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif"]);
-const TEXT_EXT = new Set(["txt", "md", "csv", "json", "html", "htm", "xml", "yaml", "yml", "log", "tsv"]);
+const TEXT_EXT = new Set([
+  "txt",
+  "md",
+  "csv",
+  "json",
+  "html",
+  "htm",
+  "xml",
+  "yaml",
+  "yml",
+  "log",
+  "tsv",
+]);
 
 function classifyFile(filename: string, mime?: string): "image" | "text" | "other" {
   const m = (mime || "").toLowerCase();
@@ -24,9 +35,7 @@ function classifyFile(filename: string, mime?: string): "image" | "text" | "othe
 
 function stripHtml(html: string): { title: string; text: string; description: string } {
   const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  const descMatch = html.match(
-    /<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i,
-  );
+  const descMatch = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i);
   const text = html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
@@ -51,8 +60,7 @@ function extractLocs(xml: string): string[] {
   return locs;
 }
 
-const UA =
-  "Mozilla/5.0 (compatible; CrossiSearchBot/1.0; +https://crossisearch.lovable.app)";
+const UA = "Mozilla/5.0 (compatible; CrossiSearchBot/1.0; +https://crossisearch.lovable.app)";
 
 async function fetchText(url: string): Promise<string> {
   const res = await fetch(url, {
