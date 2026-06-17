@@ -1,8 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-const CROSSATRIX_AUTH_URL =
-  "https://digjxtmzafzcgytgcwmb.supabase.co/functions/v1/crossatrix-auth";
+const CROSSATRIX_AUTH_URL = "https://digjxtmzafzcgytgcwmb.supabase.co/functions/v1/crossatrix-auth";
 const CROSSATRIX_CROIN_URL =
   "https://digjxtmzafzcgytgcwmb.supabase.co/functions/v1/crossatrix-auth";
 
@@ -10,7 +9,19 @@ const SITEMAP_PAGE_LIMIT = 80;
 export const SUBMISSIONS_BUCKET = "submissions";
 
 const IMAGE_EXT = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif"]);
-const TEXT_EXT = new Set(["txt", "md", "csv", "json", "html", "htm", "xml", "yaml", "yml", "log", "tsv"]);
+const TEXT_EXT = new Set([
+  "txt",
+  "md",
+  "csv",
+  "json",
+  "html",
+  "htm",
+  "xml",
+  "yaml",
+  "yml",
+  "log",
+  "tsv",
+]);
 
 function classifyFile(filename: string, mime?: string): "image" | "text" | "other" {
   const m = (mime || "").toLowerCase();
@@ -24,9 +35,7 @@ function classifyFile(filename: string, mime?: string): "image" | "text" | "othe
 
 function stripHtml(html: string): { title: string; text: string; description: string } {
   const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  const descMatch = html.match(
-    /<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i,
-  );
+  const descMatch = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i);
   const text = html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
@@ -51,8 +60,7 @@ function extractLocs(xml: string): string[] {
   return locs;
 }
 
-const UA =
-  "Mozilla/5.0 (compatible; CrossiSearchBot/1.0; +https://crossisearch.lovable.app)";
+const UA = "Mozilla/5.0 (compatible; CrossiSearchBot/1.0; +https://crossisearch.lovable.app)";
 
 async function fetchText(url: string): Promise<string> {
   const res = await fetch(url, {
@@ -323,7 +331,6 @@ export const submitUrl = createServerFn({ method: "POST" })
     }
   });
 
-
 // ========== SEARCH ==========
 export const searchPages = createServerFn({ method: "POST" })
   .inputValidator(
@@ -334,13 +341,13 @@ export const searchPages = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    // Strip emojis, punctuation (.,()), hyphens/underscores, and collapse whitespace
+    // Match database normalization: ignore emojis, punctuation, hyphens, underscores, etc.
     const q = data.query
-      .replace(/\p{Extended_Pictographic}/gu, " ")
-      .replace(/[.,()\-_]/g, " ")
+      .toLowerCase()
+      .replace(/\p{Extended_Pictographic}/gu, "")
+      .replace(/[^\p{Letter}\p{Number}\s]/gu, "")
       .replace(/\s+/g, " ")
       .trim();
-
 
     // Fuzzy + fast: pg_trgm-backed RPC ranks by similarity (handles typos)
     const { data: rpcRows, error } = await supabaseAdmin.rpc("search_pages_fuzzy", {
@@ -365,18 +372,10 @@ export const searchPages = createServerFn({ method: "POST" })
 
     let results: Row[] = (rpcRows as Row[] | null) ?? [];
 
-    // Fallback: if RPC fails or returns nothing, do a quick ilike pass on title/url
-    if ((error || results.length === 0) && q.length > 0) {
-      const safe = q.replace(/[,()%*]/g, " ").trim();
-      const term = `%${safe}%`;
-      let qb = supabaseAdmin
-        .from("pages")
-        .select("id,url,title,description,content,kind,mime_type,file_kind,storage_path,created_at")
-        .or(`title.ilike.${term},url.ilike.${term},description.ilike.${term}`)
-        .limit(30);
-      if (data.kind) qb = qb.eq("kind", data.kind);
-      const { data: rows } = await qb;
-      results = ((rows as Omit<Row, "score">[] | null) ?? []).map((r) => ({ ...r, score: 0.5 }));
+    // Avoid slow unindexed fallback scans if the database RPC fails.
+    if (error) {
+      console.error("search_pages_fuzzy failed", error);
+      results = [];
     }
 
     // Light JS re-rank: boost exact hostname / title matches
@@ -404,14 +403,11 @@ export const searchPages = createServerFn({ method: "POST" })
       .slice(0, 30)
       .map((x) => x.r);
 
-
     const out = await Promise.all(
       ranked.map(async (r) => {
         const snippet =
           r.description ||
-          (r.content
-            ? r.content.slice(0, 240) + (r.content.length > 240 ? "…" : "")
-            : "");
+          (r.content ? r.content.slice(0, 240) + (r.content.length > 240 ? "…" : "") : "");
         let displayUrl = r.url;
         const storagePath = (r as { storage_path?: string }).storage_path;
         if (r.kind === "file" && (storagePath || r.url.startsWith("storage://"))) {
@@ -574,7 +570,9 @@ export const revokeApiKey = createServerFn({ method: "POST" })
   });
 
 // ========== PUBLIC API: shared helpers ==========
-export async function validateApiKey(plain: string): Promise<{ id: string; created_by: string } | null> {
+export async function validateApiKey(
+  plain: string,
+): Promise<{ id: string; created_by: string } | null> {
   if (!plain || !plain.startsWith("csk_")) return null;
   const hash = await sha256Hex(plain);
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

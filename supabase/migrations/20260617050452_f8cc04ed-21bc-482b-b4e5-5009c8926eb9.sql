@@ -1,0 +1,1 @@
+ALTER TABLE public.admin_logs ENABLE ROW LEVEL SECURITY;

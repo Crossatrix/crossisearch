@@ -187,6 +187,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      crossi_normalize_search_text: { Args: { input: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -210,8 +211,6 @@ export type Database = {
           url: string
         }[]
       }
-      show_limit: { Args: never; Returns: number }
-      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       app_role: "admin" | "user"
