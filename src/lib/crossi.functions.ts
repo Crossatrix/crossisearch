@@ -569,7 +569,9 @@ export const revokeApiKey = createServerFn({ method: "POST" })
   });
 
 // ========== PUBLIC API: shared helpers ==========
-export async function validateApiKey(plain: string): Promise<{ id: string; created_by: string } | null> {
+export async function validateApiKey(
+  plain: string,
+): Promise<{ id: string; created_by: string } | null> {
   if (!plain || !plain.startsWith("csk_")) return null;
   const hash = await sha256Hex(plain);
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
