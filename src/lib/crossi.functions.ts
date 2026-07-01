@@ -332,6 +332,120 @@ export const submitUrl = createServerFn({ method: "POST" })
   });
 
 // ========== SEARCH ==========
+export type SearchResultOut = {
+  id: string;
+  url: string;
+  title: string;
+  snippet: string;
+  kind: string;
+  mime_type: string | null;
+  file_kind: string | null;
+};
+
+export function normalizeQueryForSearch(query: string): string {
+  return query
+    .toLowerCase()
+    .replace(/\p{Extended_Pictographic}/gu, "")
+    .replace(/[^\p{Letter}\p{Number}\s]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export async function searchPagesCore(
+  query: string,
+  kind: "page" | "file" | null,
+  limit: number,
+): Promise<SearchResultOut[]> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const q = normalizeQueryForSearch(query);
+  if (!q) return [];
+
+  const { data: rpcRows, error } = await supabaseAdmin.rpc("search_pages_fuzzy", {
+    q,
+    kind_filter: kind ?? undefined,
+    max_results: Math.min(60, Math.max(limit, 30)),
+  });
+
+  type Row = {
+    id: string;
+    url: string;
+    title: string | null;
+    description: string | null;
+    content: string | null;
+    kind: string;
+    mime_type: string | null;
+    file_kind: string | null;
+    storage_path: string | null;
+    created_at: string;
+    score: number;
+  };
+
+  let results: Row[] = (rpcRows as Row[] | null) ?? [];
+  if (error) {
+    console.error("search_pages_fuzzy failed", error);
+    results = [];
+  }
+
+  const fullQ = q;
+  const ranked = results
+    .map((r) => {
+      let bonus = 0;
+      const title = (r.title || "").toLowerCase();
+      const url = (r.url || "").toLowerCase();
+      let host = "";
+      try {
+        host = new URL(r.url).hostname.toLowerCase().replace(/^www\./, "");
+      } catch {
+        /* ignore */
+      }
+      const hostBase = host.includes(".") ? host.split(".").slice(0, -1).join(".") : host;
+      if (host === fullQ || hostBase === fullQ) bonus += 2;
+      else if (host.includes(fullQ)) bonus += 0.5;
+      if (title === fullQ) bonus += 1;
+      else if (title.startsWith(fullQ)) bonus += 0.4;
+      if (url.includes(fullQ)) bonus += 0.2;
+      return { r, s: (r.score || 0) + bonus };
+    })
+    .sort((a, b) => b.s - a.s)
+    .slice(0, limit)
+    .map((x) => x.r);
+
+  const out = await Promise.all(
+    ranked.map(async (r) => {
+      const snippet =
+        r.description ||
+        (r.content ? r.content.slice(0, 240) + (r.content.length > 240 ? "…" : "") : "");
+      let displayUrl = r.url;
+      const storagePath = r.storage_path;
+      if (r.kind === "file" && (storagePath || r.url.startsWith("storage://"))) {
+        const path = storagePath || r.url.replace(`storage://${SUBMISSIONS_BUCKET}/`, "");
+        const { data: signed } = await supabaseAdmin.storage
+          .from(SUBMISSIONS_BUCKET)
+          .createSignedUrl(path, 3600);
+        displayUrl = signed?.signedUrl || r.url;
+      }
+      return {
+        id: r.id,
+        url: displayUrl,
+        title: r.title || r.url,
+        snippet,
+        kind: r.kind,
+        mime_type: r.mime_type ?? null,
+        file_kind: r.file_kind ?? null,
+      };
+    }),
+  );
+  return out;
+}
+
+export async function apiSearch(
+  query: string,
+  kind: "page" | "file" | null,
+  limit: number,
+): Promise<SearchResultOut[]> {
+  return searchPagesCore(query, kind, limit);
+}
+
 export const searchPages = createServerFn({ method: "POST" })
   .inputValidator(
     z.object({
@@ -340,96 +454,8 @@ export const searchPages = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    // Match database normalization: ignore emojis, punctuation, hyphens, underscores, etc.
-    const q = data.query
-      .toLowerCase()
-      .replace(/\p{Extended_Pictographic}/gu, "")
-      .replace(/[^\p{Letter}\p{Number}\s]/gu, "")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    // Fuzzy + fast: pg_trgm-backed RPC ranks by similarity (handles typos)
-    const { data: rpcRows, error } = await supabaseAdmin.rpc("search_pages_fuzzy", {
-      q,
-      kind_filter: data.kind ?? undefined,
-      max_results: 60,
-    });
-
-    type Row = {
-      id: string;
-      url: string;
-      title: string | null;
-      description: string | null;
-      content: string | null;
-      kind: string;
-      mime_type: string | null;
-      file_kind: string | null;
-      storage_path: string | null;
-      created_at: string;
-      score: number;
-    };
-
-    let results: Row[] = (rpcRows as Row[] | null) ?? [];
-
-    // Avoid slow unindexed fallback scans if the database RPC fails.
-    if (error) {
-      console.error("search_pages_fuzzy failed", error);
-      results = [];
-    }
-
-    // Light JS re-rank: boost exact hostname / title matches
-    const fullQ = q.toLowerCase();
-    const ranked = results
-      .map((r) => {
-        let bonus = 0;
-        const title = (r.title || "").toLowerCase();
-        const url = (r.url || "").toLowerCase();
-        let host = "";
-        try {
-          host = new URL(r.url).hostname.toLowerCase().replace(/^www\./, "");
-        } catch {
-          /* ignore */
-        }
-        const hostBase = host.includes(".") ? host.split(".").slice(0, -1).join(".") : host;
-        if (host === fullQ || hostBase === fullQ) bonus += 2;
-        else if (host.includes(fullQ)) bonus += 0.5;
-        if (title === fullQ) bonus += 1;
-        else if (title.startsWith(fullQ)) bonus += 0.4;
-        if (url.includes(fullQ)) bonus += 0.2;
-        return { r, s: (r.score || 0) + bonus };
-      })
-      .sort((a, b) => b.s - a.s)
-      .slice(0, 30)
-      .map((x) => x.r);
-
-    const out = await Promise.all(
-      ranked.map(async (r) => {
-        const snippet =
-          r.description ||
-          (r.content ? r.content.slice(0, 240) + (r.content.length > 240 ? "…" : "") : "");
-        let displayUrl = r.url;
-        const storagePath = (r as { storage_path?: string }).storage_path;
-        if (r.kind === "file" && (storagePath || r.url.startsWith("storage://"))) {
-          const path = storagePath || r.url.replace(`storage://${SUBMISSIONS_BUCKET}/`, "");
-          const { data: signed } = await supabaseAdmin.storage
-            .from(SUBMISSIONS_BUCKET)
-            .createSignedUrl(path, 3600);
-          displayUrl = signed?.signedUrl || r.url;
-        }
-        return {
-          id: r.id as string,
-          url: displayUrl,
-          title: (r.title as string) || (r.url as string),
-          snippet,
-          kind: r.kind as string,
-          mime_type: (r as { mime_type?: string | null }).mime_type ?? null,
-          file_kind: (r as { file_kind?: string | null }).file_kind ?? null,
-        };
-      }),
-    );
-
-    return { results: out };
+    const results = await searchPagesCore(data.query, data.kind ?? null, 30);
+    return { results };
   });
 
 // ========== AI OVERVIEW ==========
