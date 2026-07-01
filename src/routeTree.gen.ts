@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiPublicSubmitRouteImport } from './routes/api/public/submit'
+import { Route as ApiPublicSearchRouteImport } from './routes/api/public/search'
 
 const SubmitRoute = SubmitRouteImport.update({
   id: '/submit',
@@ -46,6 +47,11 @@ const ApiPublicSubmitRoute = ApiPublicSubmitRouteImport.update({
   path: '/api/public/submit',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicSearchRoute = ApiPublicSearchRouteImport.update({
+  id: '/api/public/search',
+  path: '/api/public/search',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -53,6 +59,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/search': typeof SearchRoute
   '/submit': typeof SubmitRoute
+  '/api/public/search': typeof ApiPublicSearchRoute
   '/api/public/submit': typeof ApiPublicSubmitRoute
 }
 export interface FileRoutesByTo {
@@ -61,6 +68,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/search': typeof SearchRoute
   '/submit': typeof SubmitRoute
+  '/api/public/search': typeof ApiPublicSearchRoute
   '/api/public/submit': typeof ApiPublicSubmitRoute
 }
 export interface FileRoutesById {
@@ -70,6 +78,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/search': typeof SearchRoute
   '/submit': typeof SubmitRoute
+  '/api/public/search': typeof ApiPublicSearchRoute
   '/api/public/submit': typeof ApiPublicSubmitRoute
 }
 export interface FileRouteTypes {
@@ -80,9 +89,17 @@ export interface FileRouteTypes {
     | '/auth'
     | '/search'
     | '/submit'
+    | '/api/public/search'
     | '/api/public/submit'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/auth' | '/search' | '/submit' | '/api/public/submit'
+  to:
+    | '/'
+    | '/admin'
+    | '/auth'
+    | '/search'
+    | '/submit'
+    | '/api/public/search'
+    | '/api/public/submit'
   id:
     | '__root__'
     | '/'
@@ -90,6 +107,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/search'
     | '/submit'
+    | '/api/public/search'
     | '/api/public/submit'
   fileRoutesById: FileRoutesById
 }
@@ -99,6 +117,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   SearchRoute: typeof SearchRoute
   SubmitRoute: typeof SubmitRoute
+  ApiPublicSearchRoute: typeof ApiPublicSearchRoute
   ApiPublicSubmitRoute: typeof ApiPublicSubmitRoute
 }
 
@@ -146,6 +165,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicSubmitRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/search': {
+      id: '/api/public/search'
+      path: '/api/public/search'
+      fullPath: '/api/public/search'
+      preLoaderRoute: typeof ApiPublicSearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -155,8 +181,19 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   SearchRoute: SearchRoute,
   SubmitRoute: SubmitRoute,
+  ApiPublicSearchRoute: ApiPublicSearchRoute,
   ApiPublicSubmitRoute: ApiPublicSubmitRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
