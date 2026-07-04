@@ -63,29 +63,44 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string
+          daily_limit: number
           id: string
           key_hash: string
           label: string
           last_used_at: string | null
+          plan: string
+          plan_expires_at: string | null
+          requests_today: number
           revoked_at: string | null
+          usage_day: string
         }
         Insert: {
           created_at?: string
           created_by: string
+          daily_limit?: number
           id?: string
           key_hash: string
           label: string
           last_used_at?: string | null
+          plan?: string
+          plan_expires_at?: string | null
+          requests_today?: number
           revoked_at?: string | null
+          usage_day?: string
         }
         Update: {
           created_at?: string
           created_by?: string
+          daily_limit?: number
           id?: string
           key_hash?: string
           label?: string
           last_used_at?: string | null
+          plan?: string
+          plan_expires_at?: string | null
+          requests_today?: number
           revoked_at?: string | null
+          usage_day?: string
         }
         Relationships: []
       }
@@ -187,6 +202,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      consume_api_key: {
+        Args: { _hash: string }
+        Returns: {
+          created_by: string
+          daily_limit: number
+          id: string
+          plan: string
+          remaining: number
+          requests_today: number
+        }[]
+      }
       crossi_normalize_search_text: { Args: { input: string }; Returns: string }
       has_role: {
         Args: {
