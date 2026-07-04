@@ -72,6 +72,13 @@ function Index() {
             >
               Submit a page
             </button>
+            <button
+              type="button"
+              onClick={() => navigate({ to: "/docs" })}
+              className="px-6 py-2.5 rounded-md border border-border hover:bg-secondary transition"
+            >
+              Docs
+            </button>
           </div>
         </form>
         <p className="text-muted-foreground text-sm mt-10 text-center max-w-lg">

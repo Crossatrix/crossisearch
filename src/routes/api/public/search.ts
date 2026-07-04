@@ -8,8 +8,11 @@ const CORS = {
   "Content-Type": "application/json",
 };
 
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: CORS });
+function json(body: unknown, status = 200, extra: Record<string, string> = {}) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...CORS, ...extra },
+  });
 }
 
 async function handle(request: Request, query: string, kind: string | null, limit: number) {
@@ -18,12 +21,17 @@ async function handle(request: Request, query: string, kind: string | null, limi
     request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ||
     "";
   const auth = await validateApiKey(apiKey);
-  if (!auth) return json({ error: "Invalid or revoked API key" }, 401);
+  if (!auth) return json({ error: "Invalid key, revoked, or daily limit reached" }, 429);
   if (!query) return json({ error: "Missing query" }, 400);
   const k = kind === "page" || kind === "file" ? kind : null;
   const n = Math.max(1, Math.min(50, limit || 20));
   const results = await apiSearch(query, k, n);
-  return json({ query, kind: k, count: results.length, results });
+  const headers = {
+    "X-RateLimit-Plan": auth.plan,
+    "X-RateLimit-Limit": String(auth.limit),
+    "X-RateLimit-Remaining": String(auth.remaining),
+  };
+  return json({ query, kind: k, count: results.length, results }, 200, headers);
 }
 
 export const Route = createFileRoute("/api/public/search")({
