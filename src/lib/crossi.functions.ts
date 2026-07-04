@@ -548,14 +548,25 @@ async function sha256Hex(s: string): Promise<string> {
     .join("");
 }
 
+// ========== API KEYS (any signed-in user) ==========
+export const PLAN_LIMITS: Record<string, { limit: number; croins: number; label: string }> = {
+  free: { limit: 50, croins: 0, label: "Free" },
+  advanced: { limit: 100, croins: 1000, label: "Advanced" },
+  pro: { limit: 200, croins: 3000, label: "Pro" },
+  business: { limit: 500, croins: 8000, label: "Business" },
+  enterprise: { limit: -1, croins: 25000, label: "Enterprise" },
+};
+
 export const listApiKeys = createServerFn({ method: "POST" })
   .inputValidator(z.object({ user_id: z.string().min(1) }))
   .handler(async ({ data }) => {
-    if (!(await requireAdmin(data.user_id))) return { error: "Forbidden" as const };
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: rows } = await supabaseAdmin
       .from("api_keys")
-      .select("id,label,created_by,created_at,last_used_at,revoked_at")
+      .select(
+        "id,label,created_by,created_at,last_used_at,revoked_at,plan,daily_limit,requests_today,usage_day,plan_expires_at",
+      )
+      .eq("created_by", data.user_id)
       .order("created_at", { ascending: false });
     return { keys: rows || [] };
   });
@@ -563,7 +574,6 @@ export const listApiKeys = createServerFn({ method: "POST" })
 export const createApiKey = createServerFn({ method: "POST" })
   .inputValidator(z.object({ user_id: z.string().min(1), label: z.string().min(1).max(100) }))
   .handler(async ({ data }) => {
-    if (!(await requireAdmin(data.user_id))) return { error: "Forbidden" as const };
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const bytes = new Uint8Array(32);
     crypto.getRandomValues(bytes);
@@ -585,34 +595,106 @@ export const createApiKey = createServerFn({ method: "POST" })
 export const revokeApiKey = createServerFn({ method: "POST" })
   .inputValidator(z.object({ user_id: z.string().min(1), id: z.string().uuid() }))
   .handler(async ({ data }) => {
-    if (!(await requireAdmin(data.user_id))) return { error: "Forbidden" as const };
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin
       .from("api_keys")
       .update({ revoked_at: new Date().toISOString() })
-      .eq("id", data.id);
+      .eq("id", data.id)
+      .eq("created_by", data.user_id);
     if (error) return { error: error.message };
     return { success: true };
+  });
+
+export const upgradeApiKeyPlan = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      user_id: z.string().min(1),
+      id: z.string().uuid(),
+      plan: z.enum(["free", "advanced", "pro", "business", "enterprise"]),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const cfg = PLAN_LIMITS[data.plan];
+    if (!cfg) return { error: "Unknown plan" };
+
+    const { data: key } = await supabaseAdmin
+      .from("api_keys")
+      .select("id,created_by,revoked_at")
+      .eq("id", data.id)
+      .eq("created_by", data.user_id)
+      .maybeSingle();
+    if (!key || key.revoked_at) return { error: "Key not found" };
+
+    if (cfg.croins > 0) {
+      const apiKey = process.env.CROSSATRIX_API_KEY;
+      if (!apiKey) return { error: "Billing unavailable" };
+      try {
+        const res = await fetch(CROSSATRIX_CROIN_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+          body: JSON.stringify({
+            action: "debit",
+            user_id: data.user_id,
+            amount: cfg.croins,
+            description: `Crossi Search API — ${cfg.label} plan (30 days)`,
+          }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          return {
+            error:
+              (body as { error?: string }).error ||
+              `Not enough Croins. ${cfg.croins} required.`,
+          };
+        }
+      } catch {
+        return { error: "Billing request failed" };
+      }
+    }
+
+    const expires =
+      data.plan === "free"
+        ? null
+        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { error } = await supabaseAdmin
+      .from("api_keys")
+      .update({
+        plan: data.plan,
+        daily_limit: cfg.limit,
+        plan_expires_at: expires,
+      })
+      .eq("id", data.id);
+    if (error) return { error: error.message };
+    return { success: true, plan: data.plan, daily_limit: cfg.limit, expires_at: expires };
   });
 
 // ========== PUBLIC API: shared helpers ==========
 export async function validateApiKey(
   plain: string,
-): Promise<{ id: string; created_by: string } | null> {
+): Promise<
+  | { id: string; created_by: string; remaining: number; limit: number; plan: string }
+  | null
+> {
   if (!plain || !plain.startsWith("csk_")) return null;
   const hash = await sha256Hex(plain);
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data } = await supabaseAdmin
-    .from("api_keys")
-    .select("id,created_by,revoked_at")
-    .eq("key_hash", hash)
-    .maybeSingle();
-  if (!data || data.revoked_at) return null;
-  await supabaseAdmin
-    .from("api_keys")
-    .update({ last_used_at: new Date().toISOString() })
-    .eq("id", data.id);
-  return { id: data.id, created_by: data.created_by };
+  const { data, error } = await supabaseAdmin.rpc("consume_api_key", { _hash: hash });
+  if (error || !data || (Array.isArray(data) && data.length === 0)) return null;
+  const row = (Array.isArray(data) ? data[0] : data) as {
+    id: string;
+    created_by: string;
+    plan: string;
+    daily_limit: number;
+    remaining: number;
+  };
+  return {
+    id: row.id,
+    created_by: row.created_by,
+    remaining: row.remaining,
+    limit: row.daily_limit,
+    plan: row.plan,
+  };
 }
 
 export async function apiSubmitPage(url: string, submittedBy: string) {
