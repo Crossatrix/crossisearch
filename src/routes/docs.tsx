@@ -95,7 +95,7 @@ function DocsPage() {
     setBusy(true);
     try {
       const r = await createKey({
-        data: { user_id: session!.user.id, label: label.trim() },
+        data: { user_id: session!.user.id, label: label.trim(), scope: "read" },
       });
       if ("error" in r && r.error) setErr(r.error);
       else if ("key" in r) {
