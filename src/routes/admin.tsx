@@ -56,7 +56,7 @@ function AdminPage() {
 
   useEffect(() => {
     if (!admin || !session) return;
-    listKeys({ data: { user_id: session.user.id } }).then((r) => {
+    listKeys({ data: { user_id: session.user.id, scope: "write" } }).then((r) => {
       if ("keys" in r) setKeys(r.keys as KeyRow[]);
     });
   }, [admin, session, listKeys]);
