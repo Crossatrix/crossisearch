@@ -131,7 +131,9 @@ function AdminPage() {
       setErr(r.error);
       return;
     }
-    const refreshed = await listKeys({ data: { user_id: session!.user.id } });
+    const refreshed = await listKeys({
+      data: { user_id: session!.user.id, scope: "write" },
+    });
     if ("keys" in refreshed) setKeys(refreshed.keys as KeyRow[]);
   }
 
