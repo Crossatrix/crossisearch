@@ -144,7 +144,9 @@ function AdminPage() {
         <div>
           <h1 className="text-3xl font-bold">Admin</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            API keys for programmatic submissions to Crossi Search.
+            Admin API keys — <span className="font-medium text-foreground">write-only</span>{" "}
+            (submit endpoint) with <span className="font-medium text-foreground">no rate limit</span>.
+            These keys are admin-only and never exposed on the public docs page.
           </p>
         </div>
 
