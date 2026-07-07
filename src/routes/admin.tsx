@@ -107,14 +107,16 @@ function AdminPage() {
     setBusy(true);
     try {
       const r = await createKey({
-        data: { user_id: session!.user.id, label: label.trim() },
+        data: { user_id: session!.user.id, label: label.trim(), scope: "write" },
       });
       if ("error" in r && r.error) {
         setErr(r.error);
       } else if ("key" in r) {
         setNewKey(r.key ?? null);
         setLabel("");
-        const refreshed = await listKeys({ data: { user_id: session!.user.id } });
+        const refreshed = await listKeys({
+          data: { user_id: session!.user.id, scope: "write" },
+        });
         if ("keys" in refreshed) setKeys(refreshed.keys as KeyRow[]);
       }
     } finally {
