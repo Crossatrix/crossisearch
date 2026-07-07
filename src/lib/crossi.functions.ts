@@ -558,34 +558,57 @@ export const PLAN_LIMITS: Record<string, { limit: number; croins: number; label:
 };
 
 export const listApiKeys = createServerFn({ method: "POST" })
-  .inputValidator(z.object({ user_id: z.string().min(1) }))
+  .inputValidator(
+    z.object({
+      user_id: z.string().min(1),
+      scope: z.enum(["read", "write"]).optional(),
+    }),
+  )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: rows } = await supabaseAdmin
+    let q = supabaseAdmin
       .from("api_keys")
       .select(
-        "id,label,created_by,created_at,last_used_at,revoked_at,plan,daily_limit,requests_today,usage_day,plan_expires_at",
+        "id,label,created_by,created_at,last_used_at,revoked_at,plan,daily_limit,requests_today,usage_day,plan_expires_at,scope",
       )
-      .eq("created_by", data.user_id)
-      .order("created_at", { ascending: false });
+      .eq("created_by", data.user_id);
+    if (data.scope) q = q.eq("scope", data.scope);
+    const { data: rows } = await q.order("created_at", { ascending: false });
     return { keys: rows || [] };
   });
 
 export const createApiKey = createServerFn({ method: "POST" })
-  .inputValidator(z.object({ user_id: z.string().min(1), label: z.string().min(1).max(100) }))
+  .inputValidator(
+    z.object({
+      user_id: z.string().min(1),
+      label: z.string().min(1).max(100),
+      scope: z.enum(["read", "write"]).optional(),
+    }),
+  )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const scope = data.scope ?? "read";
+    if (scope === "write" && !(await requireAdmin(data.user_id))) {
+      return { error: "Admin only" };
+    }
     const bytes = new Uint8Array(32);
     crypto.getRandomValues(bytes);
     const plain =
-      "csk_" +
+      (scope === "write" ? "csk_adm_" : "csk_") +
       Array.from(bytes)
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("");
     const hash = await sha256Hex(plain);
     const { data: row, error } = await supabaseAdmin
       .from("api_keys")
-      .insert({ key_hash: hash, label: data.label, created_by: data.user_id })
+      .insert({
+        key_hash: hash,
+        label: data.label,
+        created_by: data.user_id,
+        scope,
+        daily_limit: scope === "write" ? -1 : 50,
+        plan: scope === "write" ? "admin" : "free",
+      })
       .select("id,label,created_at")
       .single();
     if (error || !row) return { error: error?.message || "Failed to create key" };
