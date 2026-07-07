@@ -696,7 +696,14 @@ export const upgradeApiKeyPlan = createServerFn({ method: "POST" })
 export async function validateApiKey(
   plain: string,
 ): Promise<
-  | { id: string; created_by: string; remaining: number; limit: number; plan: string }
+  | {
+      id: string;
+      created_by: string;
+      remaining: number;
+      limit: number;
+      plan: string;
+      scope: "read" | "write";
+    }
   | null
 > {
   if (!plain || !plain.startsWith("csk_")) return null;
@@ -710,6 +717,7 @@ export async function validateApiKey(
     plan: string;
     daily_limit: number;
     remaining: number;
+    scope: "read" | "write";
   };
   return {
     id: row.id,
@@ -717,6 +725,7 @@ export async function validateApiKey(
     remaining: row.remaining,
     limit: row.daily_limit,
     plan: row.plan,
+    scope: row.scope,
   };
 }
 
