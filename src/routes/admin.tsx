@@ -56,7 +56,7 @@ function AdminPage() {
 
   useEffect(() => {
     if (!admin || !session) return;
-    listKeys({ data: { user_id: session.user.id } }).then((r) => {
+    listKeys({ data: { user_id: session.user.id, scope: "write" } }).then((r) => {
       if ("keys" in r) setKeys(r.keys as KeyRow[]);
     });
   }, [admin, session, listKeys]);
@@ -107,14 +107,16 @@ function AdminPage() {
     setBusy(true);
     try {
       const r = await createKey({
-        data: { user_id: session!.user.id, label: label.trim() },
+        data: { user_id: session!.user.id, label: label.trim(), scope: "write" },
       });
       if ("error" in r && r.error) {
         setErr(r.error);
       } else if ("key" in r) {
         setNewKey(r.key ?? null);
         setLabel("");
-        const refreshed = await listKeys({ data: { user_id: session!.user.id } });
+        const refreshed = await listKeys({
+          data: { user_id: session!.user.id, scope: "write" },
+        });
         if ("keys" in refreshed) setKeys(refreshed.keys as KeyRow[]);
       }
     } finally {
@@ -129,7 +131,9 @@ function AdminPage() {
       setErr(r.error);
       return;
     }
-    const refreshed = await listKeys({ data: { user_id: session!.user.id } });
+    const refreshed = await listKeys({
+      data: { user_id: session!.user.id, scope: "write" },
+    });
     if ("keys" in refreshed) setKeys(refreshed.keys as KeyRow[]);
   }
 
@@ -140,7 +144,9 @@ function AdminPage() {
         <div>
           <h1 className="text-3xl font-bold">Admin</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            API keys for programmatic submissions to Crossi Search.
+            Admin API keys — <span className="font-medium text-foreground">write-only</span>{" "}
+            (submit endpoint) with <span className="font-medium text-foreground">no rate limit</span>.
+            These keys are admin-only and never exposed on the public docs page.
           </p>
         </div>
 

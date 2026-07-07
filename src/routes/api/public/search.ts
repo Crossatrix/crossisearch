@@ -22,6 +22,9 @@ async function handle(request: Request, query: string, kind: string | null, limi
     "";
   const auth = await validateApiKey(apiKey);
   if (!auth) return json({ error: "Invalid key, revoked, or daily limit reached" }, 429);
+  if (auth.scope !== "read") {
+    return json({ error: "This key is not authorized for search" }, 403);
+  }
   if (!query) return json({ error: "Missing query" }, 400);
   const k = kind === "page" || kind === "file" ? kind : null;
   const n = Math.max(1, Math.min(50, limit || 20));
