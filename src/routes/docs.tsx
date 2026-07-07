@@ -58,7 +58,7 @@ function DocsPage() {
 
   async function refresh() {
     if (!session) return;
-    const r = await listKeys({ data: { user_id: session.user.id } });
+    const r = await listKeys({ data: { user_id: session.user.id, scope: "read" } });
     if ("keys" in r) setKeys(r.keys as KeyRow[]);
   }
 
