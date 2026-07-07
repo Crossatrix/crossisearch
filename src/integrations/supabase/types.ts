@@ -72,6 +72,7 @@ export type Database = {
           plan_expires_at: string | null
           requests_today: number
           revoked_at: string | null
+          scope: string
           usage_day: string
         }
         Insert: {
@@ -86,6 +87,7 @@ export type Database = {
           plan_expires_at?: string | null
           requests_today?: number
           revoked_at?: string | null
+          scope?: string
           usage_day?: string
         }
         Update: {
@@ -100,6 +102,7 @@ export type Database = {
           plan_expires_at?: string | null
           requests_today?: number
           revoked_at?: string | null
+          scope?: string
           usage_day?: string
         }
         Relationships: []
@@ -211,6 +214,7 @@ export type Database = {
           plan: string
           remaining: number
           requests_today: number
+          scope: string
         }[]
       }
       crossi_normalize_search_text: { Args: { input: string }; Returns: string }
