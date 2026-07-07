@@ -32,6 +32,14 @@ export function Header() {
           >
             Submit
           </Link>
+          {session && (
+            <Link
+              to="/dashboard"
+              className="px-3 py-1.5 rounded-md hover:bg-secondary transition"
+            >
+              Dashboard
+            </Link>
+          )}
           {admin && (
             <Link
               to="/admin"
