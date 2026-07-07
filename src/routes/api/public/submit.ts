@@ -35,6 +35,9 @@ export const Route = createFileRoute("/api/public/submit")({
           "";
         const auth = await validateApiKey(apiKey);
         if (!auth) return json({ error: "Invalid or revoked API key" }, 401);
+        if (auth.scope !== "write") {
+          return json({ error: "This key is not authorized for submissions" }, 403);
+        }
 
         let body: unknown;
         try {
