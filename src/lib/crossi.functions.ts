@@ -3,7 +3,7 @@ import { z } from "zod";
 
 const CROSSATRIX_AUTH_URL = "https://digjxtmzafzcgytgcwmb.supabase.co/functions/v1/crossatrix-auth";
 const CROSSATRIX_CROIN_URL =
-  "https://digjxtmzafzcgytgcwmb.supabase.co/functions/v1/crossatrix-auth";
+  "https://digjxtmzafzcgytgcwmb.supabase.co/functions/v1/croins";
 
 const SITEMAP_PAGE_LIMIT = 80;
 export const SUBMISSIONS_BUCKET = "submissions";
