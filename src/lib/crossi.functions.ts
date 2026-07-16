@@ -469,6 +469,7 @@ export async function searchPagesCore(
         kind: r.kind,
         mime_type: r.mime_type ?? null,
         file_kind: r.file_kind ?? null,
+        iframe_status: r.iframe_status ?? null,
       };
     }),
   );
