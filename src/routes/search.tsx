@@ -8,6 +8,7 @@ import {
   aiOverview,
   isAdmin,
   deletePage,
+  testIframeStatus,
 } from "@/lib/crossi.functions";
 import { useSession } from "@/lib/auth";
 
@@ -38,6 +39,7 @@ type Result = {
   kind: string;
   mime_type: string | null;
   file_kind: string | null;
+  iframe_status: string | null;
 };
 
 function SearchPage() {
@@ -48,6 +50,9 @@ function SearchPage() {
   const overview = useServerFn(aiOverview);
   const checkAdmin = useServerFn(isAdmin);
   const del = useServerFn(deletePage);
+  const testIframe = useServerFn(testIframeStatus);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [testingId, setTestingId] = useState<string | null>(null);
 
   const [input, setInput] = useState(q);
   const [results, setResults] = useState<Result[] | null>(null);
