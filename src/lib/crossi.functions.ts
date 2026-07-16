@@ -103,6 +103,39 @@ async function pingUrl(url: string): Promise<boolean> {
   }
 }
 
+// Check if a URL can be embedded in an iframe by inspecting response headers.
+// Returns 'allowed' | 'blocked' | null (couldn't determine).
+async function checkIframeable(url: string): Promise<"allowed" | "blocked" | null> {
+  const inspect = (headers: Headers): "allowed" | "blocked" | null => {
+    const xfo = headers.get("x-frame-options")?.toLowerCase().trim();
+    if (xfo && (xfo === "deny" || xfo === "sameorigin" || xfo.startsWith("allow-from"))) {
+      return "blocked";
+    }
+    const csp = headers.get("content-security-policy")?.toLowerCase() || "";
+    const match = csp.match(/frame-ancestors([^;]*)/);
+    if (match) {
+      const val = match[1].trim();
+      if (val === "'none'" || val === "none") return "blocked";
+      if (!val.includes("*") && !val.includes("http:") && !val.includes("https:")) {
+        return "blocked";
+      }
+    }
+    return "allowed";
+  };
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { "User-Agent": UA },
+      redirect: "follow",
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok && res.status >= 500) return null;
+    return inspect(res.headers);
+  } catch {
+    return null;
+  }
+}
+
 async function awardCroins(userId: string, amount: number, description: string) {
   const apiKey = process.env.CROSSATRIX_API_KEY;
   if (!apiKey) return;
