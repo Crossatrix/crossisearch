@@ -412,6 +412,7 @@ export async function searchPagesCore(
     mime_type: string | null;
     file_kind: string | null;
     storage_path: string | null;
+    iframe_status: string | null;
     created_at: string;
     score: number;
   };
