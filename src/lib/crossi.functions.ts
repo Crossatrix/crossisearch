@@ -808,3 +808,25 @@ export async function apiSubmitFile(
   if (!r.ok) return { error: r.error || "Failed to index file" };
   return { success: true, indexed: 1 };
 }
+
+// ========== ADMIN: test iframe status ==========
+export const testIframeStatus = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ user_id: z.string().min(1), page_id: z.string().uuid() }))
+  .handler(async ({ data }) => {
+    if (!(await requireAdmin(data.user_id))) return { error: "Forbidden" };
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: row } = await supabaseAdmin
+      .from("pages")
+      .select("url, kind")
+      .eq("id", data.page_id)
+      .maybeSingle();
+    if (!row || row.kind !== "page") return { error: "Not a page" };
+    const status = await checkIframeable(row.url);
+    if (!status) return { error: "Could not reach the site" };
+    const { error } = await supabaseAdmin
+      .from("pages")
+      .update({ iframe_status: status })
+      .eq("id", data.page_id);
+    if (error) return { error: error.message };
+    return { success: true, iframe_status: status };
+  });
