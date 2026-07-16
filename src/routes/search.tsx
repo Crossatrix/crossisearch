@@ -290,29 +290,57 @@ function SearchPage() {
               <ul className="space-y-6">
                 {results.map((r) => (
                   <li key={r.id} className="group">
-                    <a
-                      href={r.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block"
-                    >
-                      <div className="text-xs text-muted-foreground truncate">
-                        {r.url}
-                      </div>
-                      <div className="text-lg text-primary group-hover:underline">
-                        {r.title}
-                      </div>
-                      {r.snippet && (
-                        <p className="text-sm text-foreground/80 mt-1">{r.snippet}</p>
-                      )}
-                    </a>
-                    {admin && (
-                      <button
-                        onClick={() => onDelete(r.id)}
-                        className="mt-1 text-xs text-destructive hover:underline"
+                    <div className="text-xs text-muted-foreground truncate">
+                      {r.url}
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <a
+                        href={r.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-lg text-primary group-hover:underline"
                       >
-                        Delete
-                      </button>
+                        {r.title}
+                      </a>
+                      {r.iframe_status === "allowed" && (
+                        <button
+                          onClick={() => setPreviewUrl(r.url)}
+                          title="Preview in popup"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-primary/50 text-primary text-xs font-medium hover:bg-primary/10 transition"
+                        >
+                          ▶ Preview
+                        </button>
+                      )}
+                      {r.iframe_status == null && (
+                        <span
+                          title="Not yet tested for preview support"
+                          className="inline-flex items-center px-2 py-0.5 rounded-md bg-muted text-muted-foreground text-[10px] uppercase tracking-wide"
+                        >
+                          Untested
+                        </span>
+                      )}
+                    </div>
+                    {r.snippet && (
+                      <p className="text-sm text-foreground/80 mt-1">{r.snippet}</p>
+                    )}
+                    {admin && (
+                      <div className="mt-1 flex items-center gap-3 text-xs">
+                        {r.iframe_status == null && (
+                          <button
+                            onClick={() => onTestIframe(r.id)}
+                            disabled={testingId === r.id}
+                            className="text-primary hover:underline disabled:opacity-60"
+                          >
+                            {testingId === r.id ? "Testing…" : "Test iframe"}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => onDelete(r.id)}
+                          className="text-destructive hover:underline"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     )}
                   </li>
                 ))}
@@ -321,6 +349,45 @@ function SearchPage() {
           </>
         )}
       </main>
+
+      {previewUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+          onClick={() => setPreviewUrl(null)}
+        >
+          <div
+            className="bg-card border border-border rounded-xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-border">
+              <div className="text-xs text-muted-foreground truncate flex-1">
+                {previewUrl}
+              </div>
+              <a
+                href={previewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs px-2 py-1 rounded-md border border-border hover:bg-secondary"
+              >
+                Open ↗
+              </a>
+              <button
+                onClick={() => setPreviewUrl(null)}
+                className="text-sm px-2 py-1 rounded-md hover:bg-secondary"
+              >
+                ✕
+              </button>
+            </div>
+            <iframe
+              src={previewUrl}
+              title="Preview"
+              className="flex-1 w-full bg-background"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
+
 }
