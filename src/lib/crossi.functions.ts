@@ -230,6 +230,7 @@ async function indexPage(
     }
   }
   void fetched;
+  const iframeStatus = await checkIframeable(pageUrl);
   const { error } = await supabaseAdmin.from("pages").insert({
     url: pageUrl,
     title,
@@ -240,6 +241,7 @@ async function indexPage(
     kind: "page",
     file_kind: null,
     mime_type: null,
+    iframe_status: iframeStatus,
   });
   return !error;
 }
