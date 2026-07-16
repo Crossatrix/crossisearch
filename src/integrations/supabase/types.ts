@@ -114,6 +114,7 @@ export type Database = {
           description: string | null
           file_kind: string | null
           id: string
+          iframe_status: string | null
           kind: string
           mime_type: string | null
           source_sitemap: string | null
@@ -128,6 +129,7 @@ export type Database = {
           description?: string | null
           file_kind?: string | null
           id?: string
+          iframe_status?: string | null
           kind: string
           mime_type?: string | null
           source_sitemap?: string | null
@@ -142,6 +144,7 @@ export type Database = {
           description?: string | null
           file_kind?: string | null
           id?: string
+          iframe_status?: string | null
           kind?: string
           mime_type?: string | null
           source_sitemap?: string | null
@@ -233,6 +236,7 @@ export type Database = {
           description: string
           file_kind: string
           id: string
+          iframe_status: string
           kind: string
           mime_type: string
           score: number
