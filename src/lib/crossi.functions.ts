@@ -103,6 +103,39 @@ async function pingUrl(url: string): Promise<boolean> {
   }
 }
 
+// Check if a URL can be embedded in an iframe by inspecting response headers.
+// Returns 'allowed' | 'blocked' | null (couldn't determine).
+async function checkIframeable(url: string): Promise<"allowed" | "blocked" | null> {
+  const inspect = (headers: Headers): "allowed" | "blocked" | null => {
+    const xfo = headers.get("x-frame-options")?.toLowerCase().trim();
+    if (xfo && (xfo === "deny" || xfo === "sameorigin" || xfo.startsWith("allow-from"))) {
+      return "blocked";
+    }
+    const csp = headers.get("content-security-policy")?.toLowerCase() || "";
+    const match = csp.match(/frame-ancestors([^;]*)/);
+    if (match) {
+      const val = match[1].trim();
+      if (val === "'none'" || val === "none") return "blocked";
+      if (!val.includes("*") && !val.includes("http:") && !val.includes("https:")) {
+        return "blocked";
+      }
+    }
+    return "allowed";
+  };
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { "User-Agent": UA },
+      redirect: "follow",
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok && res.status >= 500) return null;
+    return inspect(res.headers);
+  } catch {
+    return null;
+  }
+}
+
 async function awardCroins(userId: string, amount: number, description: string) {
   const apiKey = process.env.CROSSATRIX_API_KEY;
   if (!apiKey) return;
@@ -197,6 +230,7 @@ async function indexPage(
     }
   }
   void fetched;
+  const iframeStatus = await checkIframeable(pageUrl);
   const { error } = await supabaseAdmin.from("pages").insert({
     url: pageUrl,
     title,
@@ -207,6 +241,7 @@ async function indexPage(
     kind: "page",
     file_kind: null,
     mime_type: null,
+    iframe_status: iframeStatus,
   });
   return !error;
 }
@@ -340,6 +375,7 @@ export type SearchResultOut = {
   kind: string;
   mime_type: string | null;
   file_kind: string | null;
+  iframe_status: string | null;
 };
 
 export function normalizeQueryForSearch(query: string): string {
@@ -376,6 +412,7 @@ export async function searchPagesCore(
     mime_type: string | null;
     file_kind: string | null;
     storage_path: string | null;
+    iframe_status: string | null;
     created_at: string;
     score: number;
   };
@@ -432,6 +469,7 @@ export async function searchPagesCore(
         kind: r.kind,
         mime_type: r.mime_type ?? null,
         file_kind: r.file_kind ?? null,
+        iframe_status: r.iframe_status ?? null,
       };
     }),
   );
@@ -770,3 +808,25 @@ export async function apiSubmitFile(
   if (!r.ok) return { error: r.error || "Failed to index file" };
   return { success: true, indexed: 1 };
 }
+
+// ========== ADMIN: test iframe status ==========
+export const testIframeStatus = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ user_id: z.string().min(1), page_id: z.string().uuid() }))
+  .handler(async ({ data }) => {
+    if (!(await requireAdmin(data.user_id))) return { error: "Forbidden" };
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: row } = await supabaseAdmin
+      .from("pages")
+      .select("url, kind")
+      .eq("id", data.page_id)
+      .maybeSingle();
+    if (!row || row.kind !== "page") return { error: "Not a page" };
+    const status = await checkIframeable(row.url);
+    if (!status) return { error: "Could not reach the site" };
+    const { error } = await supabaseAdmin
+      .from("pages")
+      .update({ iframe_status: status })
+      .eq("id", data.page_id);
+    if (error) return { error: error.message };
+    return { success: true, iframe_status: status };
+  });
