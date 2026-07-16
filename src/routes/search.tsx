@@ -111,6 +111,23 @@ function SearchPage() {
     setResults((prev) => (prev ? prev.filter((x) => x.id !== id) : prev));
   }
 
+  async function onTestIframe(id: string) {
+    if (!session) return;
+    setTestingId(id);
+    const r = await testIframe({ data: { user_id: session.user.id, page_id: id } });
+    setTestingId(null);
+    if ("error" in r && r.error) {
+      alert(r.error);
+      return;
+    }
+    if ("iframe_status" in r) {
+      const status = r.iframe_status as string;
+      setResults((prev) =>
+        prev ? prev.map((x) => (x.id === id ? { ...x, iframe_status: status } : x)) : prev,
+      );
+    }
+  }
+
   const imageResults = (results || []).filter((r) => r.file_kind === "image");
   const otherFileResults = (results || []).filter((r) => r.file_kind !== "image");
 
