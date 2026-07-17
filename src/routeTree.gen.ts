@@ -16,6 +16,7 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiAiOverviewRouteImport } from './routes/api/ai-overview'
 import { Route as ApiPublicSubmitRouteImport } from './routes/api/public/submit'
 import { Route as ApiPublicSearchRouteImport } from './routes/api/public/search'
 
@@ -54,6 +55,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAiOverviewRoute = ApiAiOverviewRouteImport.update({
+  id: '/api/ai-overview',
+  path: '/api/ai-overview',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicSubmitRoute = ApiPublicSubmitRouteImport.update({
   id: '/api/public/submit',
   path: '/api/public/submit',
@@ -73,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/docs': typeof DocsRoute
   '/search': typeof SearchRoute
   '/submit': typeof SubmitRoute
+  '/api/ai-overview': typeof ApiAiOverviewRoute
   '/api/public/search': typeof ApiPublicSearchRoute
   '/api/public/submit': typeof ApiPublicSubmitRoute
 }
@@ -84,6 +91,7 @@ export interface FileRoutesByTo {
   '/docs': typeof DocsRoute
   '/search': typeof SearchRoute
   '/submit': typeof SubmitRoute
+  '/api/ai-overview': typeof ApiAiOverviewRoute
   '/api/public/search': typeof ApiPublicSearchRoute
   '/api/public/submit': typeof ApiPublicSubmitRoute
 }
@@ -96,6 +104,7 @@ export interface FileRoutesById {
   '/docs': typeof DocsRoute
   '/search': typeof SearchRoute
   '/submit': typeof SubmitRoute
+  '/api/ai-overview': typeof ApiAiOverviewRoute
   '/api/public/search': typeof ApiPublicSearchRoute
   '/api/public/submit': typeof ApiPublicSubmitRoute
 }
@@ -109,6 +118,7 @@ export interface FileRouteTypes {
     | '/docs'
     | '/search'
     | '/submit'
+    | '/api/ai-overview'
     | '/api/public/search'
     | '/api/public/submit'
   fileRoutesByTo: FileRoutesByTo
@@ -120,6 +130,7 @@ export interface FileRouteTypes {
     | '/docs'
     | '/search'
     | '/submit'
+    | '/api/ai-overview'
     | '/api/public/search'
     | '/api/public/submit'
   id:
@@ -131,6 +142,7 @@ export interface FileRouteTypes {
     | '/docs'
     | '/search'
     | '/submit'
+    | '/api/ai-overview'
     | '/api/public/search'
     | '/api/public/submit'
   fileRoutesById: FileRoutesById
@@ -143,6 +155,7 @@ export interface RootRouteChildren {
   DocsRoute: typeof DocsRoute
   SearchRoute: typeof SearchRoute
   SubmitRoute: typeof SubmitRoute
+  ApiAiOverviewRoute: typeof ApiAiOverviewRoute
   ApiPublicSearchRoute: typeof ApiPublicSearchRoute
   ApiPublicSubmitRoute: typeof ApiPublicSubmitRoute
 }
@@ -198,6 +211,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/ai-overview': {
+      id: '/api/ai-overview'
+      path: '/api/ai-overview'
+      fullPath: '/api/ai-overview'
+      preLoaderRoute: typeof ApiAiOverviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/submit': {
       id: '/api/public/submit'
       path: '/api/public/submit'
@@ -223,6 +243,7 @@ const rootRouteChildren: RootRouteChildren = {
   DocsRoute: DocsRoute,
   SearchRoute: SearchRoute,
   SubmitRoute: SubmitRoute,
+  ApiAiOverviewRoute: ApiAiOverviewRoute,
   ApiPublicSearchRoute: ApiPublicSearchRoute,
   ApiPublicSubmitRoute: ApiPublicSubmitRoute,
 }
