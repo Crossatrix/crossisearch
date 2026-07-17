@@ -5,7 +5,7 @@ import { z } from "zod";
 import { Header } from "@/components/Header";
 import {
   searchPages,
-  aiOverview,
+  
   isAdmin,
   deletePage,
   testIframeStatus,
@@ -49,7 +49,7 @@ function SearchPage() {
   const navigate = useNavigate();
   const session = useSession();
   const search = useServerFn(searchPages);
-  const overview = useServerFn(aiOverview);
+  
   const checkAdmin = useServerFn(isAdmin);
   const del = useServerFn(deletePage);
   const testIframe = useServerFn(testIframeStatus);
