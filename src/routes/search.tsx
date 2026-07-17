@@ -53,8 +53,10 @@ function SearchPage() {
   const checkAdmin = useServerFn(isAdmin);
   const del = useServerFn(deletePage);
   const testIframe = useServerFn(testIframeStatus);
+  const testRobots = useServerFn(testRobotsStatus);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [testingRobotsId, setTestingRobotsId] = useState<string | null>(null);
 
   const [input, setInput] = useState(q);
   const [results, setResults] = useState<Result[] | null>(null);
