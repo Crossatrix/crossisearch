@@ -906,3 +906,25 @@ export const testIframeStatus = createServerFn({ method: "POST" })
     if (error) return { error: error.message };
     return { success: true, iframe_status: status };
   });
+
+// ========== ADMIN: test robots.txt status ==========
+export const testRobotsStatus = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ user_id: z.string().min(1), page_id: z.string().uuid() }))
+  .handler(async ({ data }) => {
+    if (!(await requireAdmin(data.user_id))) return { error: "Forbidden" };
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: row } = await supabaseAdmin
+      .from("pages")
+      .select("url, kind")
+      .eq("id", data.page_id)
+      .maybeSingle();
+    if (!row || row.kind !== "page") return { error: "Not a page" };
+    const status = await checkRobots(row.url);
+    if (!status) return { error: "Could not fetch robots.txt" };
+    const { error } = await supabaseAdmin
+      .from("pages")
+      .update({ robots_status: status })
+      .eq("id", data.page_id);
+    if (error) return { error: error.message };
+    return { success: true, robots_status: status };
+  });
