@@ -9,6 +9,7 @@ import {
   isAdmin,
   deletePage,
   testIframeStatus,
+  testRobotsStatus,
 } from "@/lib/crossi.functions";
 import { useSession } from "@/lib/auth";
 
