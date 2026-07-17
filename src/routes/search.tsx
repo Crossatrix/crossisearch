@@ -132,6 +132,23 @@ function SearchPage() {
     }
   }
 
+  async function onTestRobots(id: string) {
+    if (!session) return;
+    setTestingRobotsId(id);
+    const r = await testRobots({ data: { user_id: session.user.id, page_id: id } });
+    setTestingRobotsId(null);
+    if ("error" in r && r.error) {
+      alert(r.error);
+      return;
+    }
+    if ("robots_status" in r) {
+      const status = r.robots_status as string;
+      setResults((prev) =>
+        prev ? prev.map((x) => (x.id === id ? { ...x, robots_status: status } : x)) : prev,
+      );
+    }
+  }
+
   const imageResults = (results || []).filter((r) => r.file_kind === "image");
   const otherFileResults = (results || []).filter((r) => r.file_kind !== "image");
 
