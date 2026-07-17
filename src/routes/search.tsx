@@ -80,26 +80,53 @@ function SearchPage() {
       setOv("");
       return;
     }
+    const kind = tab === "files" ? "file" : "page";
+    const ac = new AbortController();
+
+    // Fire results + streaming AI overview in parallel — the overview no
+    // longer waits on the search round-trip.
     setLoading(true);
     setOv("");
-    const kind = tab === "files" ? "file" : "page";
     search({ data: { query: q, kind } })
       .then((r) => {
         setResults(r.results as Result[]);
-        if (tab === "web" && r.results.length > 0) {
-          setOvLoading(true);
-          overview({
-            data: {
-              query: q,
-              sources: r.results.slice(0, 8).map((x) => x.url),
-            },
-          })
-            .then((o) => setOv(o.overview))
-            .finally(() => setOvLoading(false));
-        }
       })
       .finally(() => setLoading(false));
-  }, [q, tab, search, overview]);
+
+    if (tab === "web") {
+      setOvLoading(true);
+      (async () => {
+        try {
+          const res = await fetch("/api/ai-overview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: q, kind }),
+            signal: ac.signal,
+          });
+          if (!res.ok || !res.body) return;
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let firstChunk = true;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            if (firstChunk) {
+              setOvLoading(false);
+              firstChunk = false;
+            }
+            setOv((prev) => prev + chunk);
+          }
+        } catch {
+          /* aborted or network */
+        } finally {
+          setOvLoading(false);
+        }
+      })();
+    }
+
+    return () => ac.abort();
+  }, [q, tab, search]);
 
   const goTab = (next: "web" | "files") =>
     navigate({ to: "/search", search: { q, tab: next } });
