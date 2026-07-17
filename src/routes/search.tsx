@@ -332,12 +332,36 @@ function SearchPage() {
                           ▶ Preview
                         </button>
                       )}
-                      {r.iframe_status == null && (
+                      {admin && r.iframe_status == null && (
                         <span
                           title="Not yet tested for preview support"
                           className="inline-flex items-center px-2 py-0.5 rounded-md bg-muted text-muted-foreground text-[10px] uppercase tracking-wide"
                         >
                           Untested
+                        </span>
+                      )}
+                      {admin && r.iframe_status === "blocked" && (
+                        <span
+                          title="Site blocks iframe embedding"
+                          className="inline-flex items-center px-2 py-0.5 rounded-md bg-destructive/15 text-destructive text-[10px] uppercase tracking-wide"
+                        >
+                          Iframe blocked
+                        </span>
+                      )}
+                      {admin && r.robots_status == null && (
+                        <span
+                          title="robots.txt not verified yet"
+                          className="inline-flex items-center px-2 py-0.5 rounded-md bg-muted text-muted-foreground text-[10px] uppercase tracking-wide"
+                        >
+                          Robots unverified
+                        </span>
+                      )}
+                      {admin && r.robots_status === "blocked" && (
+                        <span
+                          title="robots.txt disallows crossisearch"
+                          className="inline-flex items-center px-2 py-0.5 rounded-md bg-destructive/15 text-destructive text-[10px] uppercase tracking-wide"
+                        >
+                          Robots blocked
                         </span>
                       )}
                     </div>
@@ -353,6 +377,15 @@ function SearchPage() {
                             className="text-primary hover:underline disabled:opacity-60"
                           >
                             {testingId === r.id ? "Testing…" : "Test iframe"}
+                          </button>
+                        )}
+                        {r.robots_status == null && (
+                          <button
+                            onClick={() => onTestRobots(r.id)}
+                            disabled={testingRobotsId === r.id}
+                            className="text-primary hover:underline disabled:opacity-60"
+                          >
+                            {testingRobotsId === r.id ? "Testing…" : "Test robots.txt"}
                           </button>
                         )}
                         <button
