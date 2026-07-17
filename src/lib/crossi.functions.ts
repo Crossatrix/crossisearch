@@ -136,6 +136,75 @@ async function checkIframeable(url: string): Promise<"allowed" | "blocked" | nul
   }
 }
 
+// Check robots.txt for a URL.
+// Returns 'allowed' | 'blocked' | null (could not fetch/verify).
+// "blocked" ONLY when a user-agent group for "crossisearch" (or "crossisearchbot")
+// explicitly disallows the path. Not mentioning us counts as allowed.
+async function checkRobots(url: string): Promise<"allowed" | "blocked" | null> {
+  let robotsUrl: string;
+  let pagePath: string;
+  try {
+    const u = new URL(url);
+    robotsUrl = u.origin + "/robots.txt";
+    pagePath = u.pathname || "/";
+  } catch {
+    return null;
+  }
+  let text: string;
+  try {
+    const res = await fetch(robotsUrl, {
+      headers: { "User-Agent": UA },
+      redirect: "follow",
+      signal: AbortSignal.timeout(10000),
+    });
+    if (res.status === 404) return "allowed"; // no robots.txt = allowed
+    if (!res.ok) return null;
+    text = await res.text();
+    if (text.length > 200000) return null;
+  } catch {
+    return null;
+  }
+  // Parse groups matching "crossisearch" (case-insensitive substring on UA token).
+  const lines = text.split(/\r?\n/);
+  let inMatchingGroup = false;
+  let sawMatchingGroup = false;
+  let pendingAgents: string[] = [];
+  let seenRule = false;
+  const disallows: string[] = [];
+  const flushGroupStart = () => {
+    inMatchingGroup = pendingAgents.some((a) => a.includes("crossisearch"));
+    if (inMatchingGroup) sawMatchingGroup = true;
+    pendingAgents = [];
+    seenRule = false;
+  };
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/#.*$/, "").trim();
+    if (!line) continue;
+    const idx = line.indexOf(":");
+    if (idx === -1) continue;
+    const field = line.slice(0, idx).trim().toLowerCase();
+    const value = line.slice(idx + 1).trim();
+    if (field === "user-agent") {
+      if (seenRule) {
+        flushGroupStart();
+      }
+      pendingAgents.push(value.toLowerCase());
+      continue;
+    }
+    if (pendingAgents.length && !seenRule) flushGroupStart();
+    if (!inMatchingGroup) continue;
+    seenRule = true;
+    if (field === "disallow" && value) disallows.push(value);
+  }
+  if (!sawMatchingGroup) return "allowed";
+  for (const rule of disallows) {
+    // Simple prefix match with basic '*' wildcard.
+    const pattern = rule.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+    if (new RegExp("^" + pattern).test(pagePath)) return "blocked";
+  }
+  return "allowed";
+}
+
 async function awardCroins(userId: string, amount: number, description: string) {
   const apiKey = process.env.CROSSATRIX_API_KEY;
   if (!apiKey) return;
@@ -230,7 +299,10 @@ async function indexPage(
     }
   }
   void fetched;
-  const iframeStatus = await checkIframeable(pageUrl);
+  const [iframeStatus, robotsStatus] = await Promise.all([
+    checkIframeable(pageUrl),
+    checkRobots(pageUrl),
+  ]);
   const { error } = await supabaseAdmin.from("pages").insert({
     url: pageUrl,
     title,
@@ -242,6 +314,7 @@ async function indexPage(
     file_kind: null,
     mime_type: null,
     iframe_status: iframeStatus,
+    robots_status: robotsStatus,
   });
   return !error;
 }
@@ -376,6 +449,7 @@ export type SearchResultOut = {
   mime_type: string | null;
   file_kind: string | null;
   iframe_status: string | null;
+  robots_status: string | null;
 };
 
 export function normalizeQueryForSearch(query: string): string {
@@ -413,6 +487,7 @@ export async function searchPagesCore(
     file_kind: string | null;
     storage_path: string | null;
     iframe_status: string | null;
+    robots_status: string | null;
     created_at: string;
     score: number;
   };
@@ -470,6 +545,7 @@ export async function searchPagesCore(
         mime_type: r.mime_type ?? null,
         file_kind: r.file_kind ?? null,
         iframe_status: r.iframe_status ?? null,
+        robots_status: r.robots_status ?? null,
       };
     }),
   );
@@ -829,4 +905,26 @@ export const testIframeStatus = createServerFn({ method: "POST" })
       .eq("id", data.page_id);
     if (error) return { error: error.message };
     return { success: true, iframe_status: status };
+  });
+
+// ========== ADMIN: test robots.txt status ==========
+export const testRobotsStatus = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ user_id: z.string().min(1), page_id: z.string().uuid() }))
+  .handler(async ({ data }) => {
+    if (!(await requireAdmin(data.user_id))) return { error: "Forbidden" };
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: row } = await supabaseAdmin
+      .from("pages")
+      .select("url, kind")
+      .eq("id", data.page_id)
+      .maybeSingle();
+    if (!row || row.kind !== "page") return { error: "Not a page" };
+    const status = await checkRobots(row.url);
+    if (!status) return { error: "Could not fetch robots.txt" };
+    const { error } = await supabaseAdmin
+      .from("pages")
+      .update({ robots_status: status })
+      .eq("id", data.page_id);
+    if (error) return { error: error.message };
+    return { success: true, robots_status: status };
   });

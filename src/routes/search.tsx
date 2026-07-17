@@ -9,6 +9,7 @@ import {
   isAdmin,
   deletePage,
   testIframeStatus,
+  testRobotsStatus,
 } from "@/lib/crossi.functions";
 import { useSession } from "@/lib/auth";
 
@@ -40,6 +41,7 @@ type Result = {
   mime_type: string | null;
   file_kind: string | null;
   iframe_status: string | null;
+  robots_status: string | null;
 };
 
 function SearchPage() {
@@ -51,8 +53,10 @@ function SearchPage() {
   const checkAdmin = useServerFn(isAdmin);
   const del = useServerFn(deletePage);
   const testIframe = useServerFn(testIframeStatus);
+  const testRobots = useServerFn(testRobotsStatus);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [testingRobotsId, setTestingRobotsId] = useState<string | null>(null);
 
   const [input, setInput] = useState(q);
   const [results, setResults] = useState<Result[] | null>(null);
@@ -124,6 +128,23 @@ function SearchPage() {
       const status = r.iframe_status as string;
       setResults((prev) =>
         prev ? prev.map((x) => (x.id === id ? { ...x, iframe_status: status } : x)) : prev,
+      );
+    }
+  }
+
+  async function onTestRobots(id: string) {
+    if (!session) return;
+    setTestingRobotsId(id);
+    const r = await testRobots({ data: { user_id: session.user.id, page_id: id } });
+    setTestingRobotsId(null);
+    if ("error" in r && r.error) {
+      alert(r.error);
+      return;
+    }
+    if ("robots_status" in r) {
+      const status = r.robots_status as string;
+      setResults((prev) =>
+        prev ? prev.map((x) => (x.id === id ? { ...x, robots_status: status } : x)) : prev,
       );
     }
   }
@@ -311,12 +332,36 @@ function SearchPage() {
                           ▶ Preview
                         </button>
                       )}
-                      {r.iframe_status == null && (
+                      {admin && r.iframe_status == null && (
                         <span
                           title="Not yet tested for preview support"
                           className="inline-flex items-center px-2 py-0.5 rounded-md bg-muted text-muted-foreground text-[10px] uppercase tracking-wide"
                         >
                           Untested
+                        </span>
+                      )}
+                      {admin && r.iframe_status === "blocked" && (
+                        <span
+                          title="Site blocks iframe embedding"
+                          className="inline-flex items-center px-2 py-0.5 rounded-md bg-destructive/15 text-destructive text-[10px] uppercase tracking-wide"
+                        >
+                          Iframe blocked
+                        </span>
+                      )}
+                      {admin && r.robots_status == null && (
+                        <span
+                          title="robots.txt not verified yet"
+                          className="inline-flex items-center px-2 py-0.5 rounded-md bg-muted text-muted-foreground text-[10px] uppercase tracking-wide"
+                        >
+                          Robots unverified
+                        </span>
+                      )}
+                      {admin && r.robots_status === "blocked" && (
+                        <span
+                          title="robots.txt disallows crossisearch"
+                          className="inline-flex items-center px-2 py-0.5 rounded-md bg-destructive/15 text-destructive text-[10px] uppercase tracking-wide"
+                        >
+                          Robots blocked
                         </span>
                       )}
                     </div>
@@ -332,6 +377,15 @@ function SearchPage() {
                             className="text-primary hover:underline disabled:opacity-60"
                           >
                             {testingId === r.id ? "Testing…" : "Test iframe"}
+                          </button>
+                        )}
+                        {r.robots_status == null && (
+                          <button
+                            onClick={() => onTestRobots(r.id)}
+                            disabled={testingRobotsId === r.id}
+                            className="text-primary hover:underline disabled:opacity-60"
+                          >
+                            {testingRobotsId === r.id ? "Testing…" : "Test robots.txt"}
                           </button>
                         )}
                         <button
