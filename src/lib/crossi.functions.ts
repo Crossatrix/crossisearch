@@ -299,7 +299,10 @@ async function indexPage(
     }
   }
   void fetched;
-  const iframeStatus = await checkIframeable(pageUrl);
+  const [iframeStatus, robotsStatus] = await Promise.all([
+    checkIframeable(pageUrl),
+    checkRobots(pageUrl),
+  ]);
   const { error } = await supabaseAdmin.from("pages").insert({
     url: pageUrl,
     title,
@@ -311,6 +314,7 @@ async function indexPage(
     file_kind: null,
     mime_type: null,
     iframe_status: iframeStatus,
+    robots_status: robotsStatus,
   });
   return !error;
 }
