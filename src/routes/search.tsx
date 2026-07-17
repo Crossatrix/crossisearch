@@ -41,6 +41,7 @@ type Result = {
   mime_type: string | null;
   file_kind: string | null;
   iframe_status: string | null;
+  robots_status: string | null;
 };
 
 function SearchPage() {
