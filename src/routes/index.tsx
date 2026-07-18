@@ -1,6 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Header } from "@/components/Header";
+import { HistoryButton } from "@/components/HistoryButton";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
