@@ -86,13 +86,32 @@ function SearchPage() {
     const kind = tab === "files" ? "file" : "page";
     const ac = new AbortController();
 
+    addSearch(q);
+
+    // Serve from device cache when available — refreshed only on Clear.
+    const cached = getCached(q, tab);
+    if (cached) {
+      setResults(cached.results as Result[]);
+      setOv(cached.overview);
+      setLoading(false);
+      setOvLoading(false);
+      return () => ac.abort();
+    }
+
     // Fire results + streaming AI overview in parallel — the overview no
     // longer waits on the search round-trip.
     setLoading(true);
     setOv("");
+    let gotResults: Result[] | null = null;
+    let gotOverview = "";
+    const persist = () => {
+      if (gotResults) setCached(q, tab, { results: gotResults, overview: gotOverview });
+    };
     search({ data: { query: q, kind } })
       .then((r) => {
-        setResults(r.results as Result[]);
+        gotResults = r.results as Result[];
+        setResults(gotResults);
+        persist();
       })
       .finally(() => setLoading(false));
 
@@ -118,8 +137,10 @@ function SearchPage() {
               setOvLoading(false);
               firstChunk = false;
             }
+            gotOverview += chunk;
             setOv((prev) => prev + chunk);
           }
+          persist();
         } catch {
           /* aborted or network */
         } finally {
@@ -130,6 +151,7 @@ function SearchPage() {
 
     return () => ac.abort();
   }, [q, tab, search]);
+
 
   const goTab = (next: "web" | "files") =>
     navigate({ to: "/search", search: { q, tab: next } });
