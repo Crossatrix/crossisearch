@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { Header } from "@/components/Header";
+import { HistoryButton } from "@/components/HistoryButton";
 import {
   searchPages,
   
@@ -12,6 +13,8 @@ import {
   testRobotsStatus,
 } from "@/lib/crossi.functions";
 import { useSession } from "@/lib/auth";
+import { addSearch, getCached, setCached } from "@/lib/search-history";
+
 
 const searchSchema = z.object({
   q: z.string().catch(""),
@@ -83,13 +86,32 @@ function SearchPage() {
     const kind = tab === "files" ? "file" : "page";
     const ac = new AbortController();
 
+    addSearch(q);
+
+    // Serve from device cache when available — refreshed only on Clear.
+    const cached = getCached(q, tab);
+    if (cached) {
+      setResults(cached.results as Result[]);
+      setOv(cached.overview);
+      setLoading(false);
+      setOvLoading(false);
+      return () => ac.abort();
+    }
+
     // Fire results + streaming AI overview in parallel — the overview no
     // longer waits on the search round-trip.
     setLoading(true);
     setOv("");
+    let gotResults: Result[] | null = null;
+    let gotOverview = "";
+    const persist = () => {
+      if (gotResults) setCached(q, tab, { results: gotResults, overview: gotOverview });
+    };
     search({ data: { query: q, kind } })
       .then((r) => {
-        setResults(r.results as Result[]);
+        gotResults = r.results as Result[];
+        setResults(gotResults);
+        persist();
       })
       .finally(() => setLoading(false));
 
@@ -115,8 +137,10 @@ function SearchPage() {
               setOvLoading(false);
               firstChunk = false;
             }
+            gotOverview += chunk;
             setOv((prev) => prev + chunk);
           }
+          persist();
         } catch {
           /* aborted or network */
         } finally {
@@ -127,6 +151,7 @@ function SearchPage() {
 
     return () => ac.abort();
   }, [q, tab, search]);
+
 
   const goTab = (next: "web" | "files") =>
     navigate({ to: "/search", search: { q, tab: next } });
@@ -195,10 +220,12 @@ function SearchPage() {
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              className="flex-1 bg-transparent outline-none"
+              className="flex-1 bg-transparent outline-none min-w-0"
               placeholder="Search"
             />
+            <HistoryButton currentTab={tab} />
           </div>
+
         </form>
         <div className="max-w-3xl mx-auto px-6 pt-3 pb-0 flex gap-1">
           {(["web", "files"] as const).map((t) => (

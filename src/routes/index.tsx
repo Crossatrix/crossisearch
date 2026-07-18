@@ -1,6 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Header } from "@/components/Header";
+import { HistoryButton } from "@/components/HistoryButton";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -55,9 +57,11 @@ function Index() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search the community-indexed web"
-              className="flex-1 bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
+              className="flex-1 bg-transparent outline-none text-foreground placeholder:text-muted-foreground min-w-0"
             />
+            <HistoryButton />
           </div>
+
           <div className="flex justify-center gap-3 mt-6">
             <button
               type="submit"
