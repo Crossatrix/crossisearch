@@ -220,10 +220,12 @@ function SearchPage() {
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              className="flex-1 bg-transparent outline-none"
+              className="flex-1 bg-transparent outline-none min-w-0"
               placeholder="Search"
             />
+            <HistoryButton currentTab={tab} />
           </div>
+
         </form>
         <div className="max-w-3xl mx-auto px-6 pt-3 pb-0 flex gap-1">
           {(["web", "files"] as const).map((t) => (
