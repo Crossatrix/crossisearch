@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { Header } from "@/components/Header";
+import { HistoryButton } from "@/components/HistoryButton";
 import {
   searchPages,
   
@@ -12,6 +13,8 @@ import {
   testRobotsStatus,
 } from "@/lib/crossi.functions";
 import { useSession } from "@/lib/auth";
+import { addSearch, getCached, setCached } from "@/lib/search-history";
+
 
 const searchSchema = z.object({
   q: z.string().catch(""),
