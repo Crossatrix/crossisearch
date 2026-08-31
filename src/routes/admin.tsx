@@ -67,7 +67,7 @@ function AdminPage() {
       if ("keys" in r) setKeys(r.keys as KeyRow[]);
     });
     fetchUsage({ data: { user_id: session.user.id, days: 14 } }).then((r) => {
-      if ("usage" in r) setUsageData({ keys: r.keys, usage: r.usage });
+      if ("usage" in r) setUsageData({ keys: r.keys ?? [], usage: r.usage ?? [] });
     });
   }, [admin, session, listKeys, fetchUsage]);
 
