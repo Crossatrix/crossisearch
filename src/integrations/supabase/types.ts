@@ -59,6 +59,32 @@ export type Database = {
         }
         Relationships: []
       }
+      api_key_usage: {
+        Row: {
+          day: string
+          key_id: string
+          requests: number
+        }
+        Insert: {
+          day?: string
+          key_id: string
+          requests?: number
+        }
+        Update: {
+          day?: string
+          key_id?: string
+          requests?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_key_usage_key_id_fkey"
+            columns: ["key_id"]
+            isOneToOne: false
+            referencedRelation: "api_keys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       api_keys: {
         Row: {
           created_at: string
@@ -249,6 +275,7 @@ export type Database = {
           url: string
         }[]
       }
+      track_api_key_usage: { Args: { _key_id: string }; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "user"

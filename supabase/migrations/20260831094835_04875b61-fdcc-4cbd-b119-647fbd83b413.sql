@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.consume_api_key(text) FROM PUBLIC, anon, authenticated;
