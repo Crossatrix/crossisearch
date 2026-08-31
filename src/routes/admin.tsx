@@ -2,12 +2,14 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { Header } from "@/components/Header";
+import { ApiKeyUsageChart } from "@/components/ApiKeyUsageChart";
 import { useSession } from "@/lib/auth";
 import {
   isAdmin,
   listApiKeys,
   createApiKey,
   revokeApiKey,
+  getApiKeyUsage,
 } from "@/lib/crossi.functions";
 
 export const Route = createFileRoute("/admin")({
@@ -36,9 +38,14 @@ function AdminPage() {
   const listKeys = useServerFn(listApiKeys);
   const createKey = useServerFn(createApiKey);
   const revoke = useServerFn(revokeApiKey);
+  const fetchUsage = useServerFn(getApiKeyUsage);
 
   const [admin, setAdmin] = useState<boolean | null>(null);
   const [keys, setKeys] = useState<KeyRow[]>([]);
+  const [usageData, setUsageData] = useState<{
+    keys: { id: string; label: string }[];
+    usage: { key_id: string; day: string; requests: number }[];
+  } | null>(null);
   const [label, setLabel] = useState("");
   const [newKey, setNewKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -59,7 +66,10 @@ function AdminPage() {
     listKeys({ data: { user_id: session.user.id, scope: "write" } }).then((r) => {
       if ("keys" in r) setKeys(r.keys as KeyRow[]);
     });
-  }, [admin, session, listKeys]);
+    fetchUsage({ data: { user_id: session.user.id, days: 14 } }).then((r) => {
+      if ("usage" in r) setUsageData({ keys: r.keys, usage: r.usage });
+    });
+  }, [admin, session, listKeys, fetchUsage]);
 
   if (!session) {
     return (

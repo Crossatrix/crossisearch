@@ -833,6 +833,7 @@ export async function validateApiKey(
     remaining: number;
     scope: "read" | "write";
   };
+  await supabaseAdmin.rpc("track_api_key_usage", { _key_id: row.id });
   return {
     id: row.id,
     created_by: row.created_by,
@@ -842,6 +843,39 @@ export async function validateApiKey(
     scope: row.scope,
   };
 }
+
+// ========== ADMIN: usage statistics ==========
+export const getApiKeyUsage = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({ user_id: z.string().min(1), days: z.number().int().min(1).max(90).optional() }),
+  )
+  .handler(async ({ data }) => {
+    if (!(await requireAdmin(data.user_id))) return { error: "Forbidden" as const };
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const days = data.days ?? 14;
+    const from = new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
+
+    const { data: keys } = await supabaseAdmin
+      .from("api_keys")
+      .select("id,label")
+      .eq("scope", "write");
+    const ids = (keys || []).map((k) => k.id);
+    if (ids.length === 0) return { days, keys: [], usage: [] };
+
+    const { data: rows } = await supabaseAdmin
+      .from("api_key_usage")
+      .select("key_id,day,requests")
+      .in("key_id", ids)
+      .gte("day", from)
+      .order("day", { ascending: true });
+
+    return {
+      days,
+      keys: (keys || []) as { id: string; label: string }[],
+      usage: (rows || []) as { key_id: string; day: string; requests: number }[],
+    };
+  });
+
 
 export async function apiSubmitPage(url: string, submittedBy: string) {
   if (await alreadyIndexed(url)) return { error: "Already submitted" };

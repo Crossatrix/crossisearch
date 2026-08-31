@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.track_api_key_usage(uuid) FROM PUBLIC, anon, authenticated;
