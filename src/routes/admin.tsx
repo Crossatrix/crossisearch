@@ -237,6 +237,21 @@ function AdminPage() {
           )}
         </section>
 
+        <section className="bg-card border border-border rounded-xl p-6">
+          <h2 className="text-lg font-semibold mb-4">Usage statistics</h2>
+          {usageData === null ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : (
+            <ApiKeyUsageChart
+              keys={usageData.keys}
+              usage={usageData.usage}
+              days={14}
+            />
+          )}
+        </section>
+
+
+
         <section className="bg-card border border-border rounded-xl p-6 text-sm space-y-3">
           <h2 className="text-lg font-semibold">Using the API</h2>
           <p className="text-muted-foreground">
