@@ -421,9 +421,15 @@ export const submitUrl = createServerFn({ method: "POST" })
         const sitemapUrl = origin + "/sitemap.xml";
         const xml = await fetchText(sitemapUrl);
         const locs = extractLocs(xml);
-        for (const loc of locs) {
-          if (loc === data.url) continue;
-          if (await indexPage(loc, data.user_id, sitemapUrl)) indexed++;
+        const todo = locs.filter((l) => l !== data.url);
+        for (let i = 0; i < todo.length; i += 8) {
+          const batch = todo.slice(i, i + 8);
+          const done = await Promise.all(
+            batch.map((loc) =>
+              indexPage(loc, data.user_id, sitemapUrl).catch(() => false),
+            ),
+          );
+          indexed += done.filter(Boolean).length;
         }
       } catch {
         /* no sitemap — ok */
