@@ -247,7 +247,7 @@ function SearchPage() {
       </div>
 
       <main className="max-w-3xl w-full mx-auto px-6 py-8 flex-1">
-        {loading && <p className="text-muted-foreground">Searching…</p>}
+        {loading && <SearchLoading />}
 
         {!loading && results && results.length === 0 && q && (
           <div className="text-center py-16">
