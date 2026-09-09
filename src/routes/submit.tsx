@@ -66,6 +66,10 @@ function SubmitPage() {
           setErr("Choose a file to upload.");
           return;
         }
+        if (file.size > 50 * 1024 * 1024) {
+          setErr("That file is too large. Please keep uploads under 50 MB.");
+          return;
+        }
         const originalExt = file.name.includes(".")
           ? "." + file.name.split(".").pop()
           : "";

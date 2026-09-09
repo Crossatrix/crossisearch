@@ -210,6 +210,7 @@ async function awardCroins(userId: string, amount: number, description: string) 
   if (!apiKey) return;
   try {
     await fetch(CROSSATRIX_CROIN_URL, {
+      signal: AbortSignal.timeout(8000),
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey },
       body: JSON.stringify({ action: "credit", user_id: userId, amount, description }),
@@ -333,15 +334,20 @@ async function indexFileFromStorage(
   const kind = classifyFile(filename, mimeType ?? undefined);
   let textContent = filename;
   if (kind === "text") {
-    const { data: blob, error: dlErr } = await supabaseAdmin.storage
-      .from(SUBMISSIONS_BUCKET)
-      .download(storagePath);
-    if (!dlErr && blob) {
-      const raw = await blob.text().catch(() => "");
-      textContent = /<html|<!doctype/i.test(raw)
-        ? stripHtml(raw).text
-        : raw.replace(/\s+/g, " ").trim().slice(0, 20000);
-      if (!textContent) textContent = filename;
+    try {
+      const dl = (await Promise.race([
+        supabaseAdmin.storage.from(SUBMISSIONS_BUCKET).download(storagePath),
+        new Promise((resolve) => setTimeout(() => resolve({ data: null, error: true }), 12000)),
+      ])) as { data: Blob | null; error: unknown };
+      if (!dl.error && dl.data) {
+        const raw = await dl.data.slice(0, 2 * 1024 * 1024).text().catch(() => "");
+        textContent = /<html|<!doctype/i.test(raw)
+          ? stripHtml(raw).text
+          : raw.replace(/\s+/g, " ").trim().slice(0, 20000);
+        if (!textContent) textContent = filename;
+      }
+    } catch {
+      textContent = filename;
     }
   }
   const { error } = await supabaseAdmin.from("pages").insert({
@@ -415,9 +421,15 @@ export const submitUrl = createServerFn({ method: "POST" })
         const sitemapUrl = origin + "/sitemap.xml";
         const xml = await fetchText(sitemapUrl);
         const locs = extractLocs(xml);
-        for (const loc of locs) {
-          if (loc === data.url) continue;
-          if (await indexPage(loc, data.user_id, sitemapUrl)) indexed++;
+        const todo = locs.filter((l) => l !== data.url);
+        for (let i = 0; i < todo.length; i += 8) {
+          const batch = todo.slice(i, i + 8);
+          const done = await Promise.all(
+            batch.map((loc) =>
+              indexPage(loc, data.user_id, sitemapUrl).catch(() => false),
+            ),
+          );
+          indexed += done.filter(Boolean).length;
         }
       } catch {
         /* no sitemap — ok */
