@@ -210,6 +210,7 @@ async function awardCroins(userId: string, amount: number, description: string) 
   if (!apiKey) return;
   try {
     await fetch(CROSSATRIX_CROIN_URL, {
+      signal: AbortSignal.timeout(8000),
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey },
       body: JSON.stringify({ action: "credit", user_id: userId, amount, description }),
@@ -333,15 +334,20 @@ async function indexFileFromStorage(
   const kind = classifyFile(filename, mimeType ?? undefined);
   let textContent = filename;
   if (kind === "text") {
-    const { data: blob, error: dlErr } = await supabaseAdmin.storage
-      .from(SUBMISSIONS_BUCKET)
-      .download(storagePath);
-    if (!dlErr && blob) {
-      const raw = await blob.text().catch(() => "");
-      textContent = /<html|<!doctype/i.test(raw)
-        ? stripHtml(raw).text
-        : raw.replace(/\s+/g, " ").trim().slice(0, 20000);
-      if (!textContent) textContent = filename;
+    try {
+      const dl = (await Promise.race([
+        supabaseAdmin.storage.from(SUBMISSIONS_BUCKET).download(storagePath),
+        new Promise((resolve) => setTimeout(() => resolve({ data: null, error: true }), 12000)),
+      ])) as { data: Blob | null; error: unknown };
+      if (!dl.error && dl.data) {
+        const raw = await dl.data.slice(0, 2 * 1024 * 1024).text().catch(() => "");
+        textContent = /<html|<!doctype/i.test(raw)
+          ? stripHtml(raw).text
+          : raw.replace(/\s+/g, " ").trim().slice(0, 20000);
+        if (!textContent) textContent = filename;
+      }
+    } catch {
+      textContent = filename;
     }
   }
   const { error } = await supabaseAdmin.from("pages").insert({
