@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 import { Header } from "@/components/Header";
 import { HistoryButton } from "@/components/HistoryButton";
+import { SearchLoading } from "@/components/SearchLoading";
 import {
   searchPages,
   
