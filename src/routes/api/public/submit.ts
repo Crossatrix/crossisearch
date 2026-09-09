@@ -74,8 +74,8 @@ export const Route = createFileRoute("/api/public/submit")({
           } catch {
             return json({ error: "Invalid base64 content" }, 400);
           }
-          if (bytes.length > 25 * 1024 * 1024) {
-            return json({ error: "File too large (max 25MB)" }, 400);
+          if (bytes.length > 50 * 1024 * 1024) {
+            return json({ error: "File too large (max 50MB)" }, 400);
           }
           const r = await apiSubmitFile(filename, mimeType, bytes, auth.created_by);
           return json(r, "error" in r ? 400 : 200);
