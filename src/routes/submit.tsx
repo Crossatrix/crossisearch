@@ -53,7 +53,7 @@ function SubmitPage() {
     );
   }
 
-  const reward = kind === "file" ? 50 : 100;
+  const reward = kind === "file" ? 6 : 5;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
