@@ -907,7 +907,8 @@ export async function apiSubmitPage(url: string, submittedBy: string) {
     /* */
   }
   if (indexed === 0) return { error: "Could not index" };
-  return { success: true, indexed };
+  await awardCroins(submittedBy, 5, `Crossi Search page submission (${indexed} pages)`);
+  return { success: true, indexed, croins: 5 };
 }
 
 export async function apiSubmitFile(
@@ -928,7 +929,8 @@ export async function apiSubmitFile(
   if (upErr) return { error: upErr.message };
   const r = await indexFileFromStorage(path, filename, mimeType, submittedBy);
   if (!r.ok) return { error: r.error || "Failed to index file" };
-  return { success: true, indexed: 1 };
+  await awardCroins(submittedBy, 6, "Crossi Search file submission");
+  return { success: true, indexed: 1, croins: 6 };
 }
 
 // ========== ADMIN: test iframe status ==========
