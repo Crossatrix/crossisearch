@@ -395,14 +395,14 @@ export const submitUrl = createServerFn({ method: "POST" })
           data.user_id,
         );
         if (!r.ok) return { error: r.error || "Submission failed" };
-        await awardCroins(data.user_id, 50, "Crossi Search file submission");
+        await awardCroins(data.user_id, 6, "Crossi Search file submission");
         await supabaseAdmin.from("submissions").insert({
           user_id: data.user_id,
           url: data.filename,
           kind: "file",
-          croins_awarded: 50,
+          croins_awarded: 6,
         });
-        return { success: true, indexed: 1, croins: 50 };
+        return { success: true, indexed: 1, croins: 6 };
       }
 
       if (await alreadyIndexed(data.url)) {
@@ -437,14 +437,14 @@ export const submitUrl = createServerFn({ method: "POST" })
 
       if (indexed === 0) return { error: "Could not index the submitted page." };
 
-      await awardCroins(data.user_id, 100, `Crossi Search page submission (${indexed} pages)`);
+      await awardCroins(data.user_id, 5, `Crossi Search page submission (${indexed} pages)`);
       await supabaseAdmin.from("submissions").insert({
         user_id: data.user_id,
         url: data.url,
         kind: "page",
-        croins_awarded: 100,
+        croins_awarded: 5,
       });
-      return { success: true, indexed, croins: 100 };
+      return { success: true, indexed, croins: 5 };
     } catch (e) {
       console.error("submitUrl failed", e);
       return { error: e instanceof Error ? e.message : "Submission failed" };
@@ -907,7 +907,8 @@ export async function apiSubmitPage(url: string, submittedBy: string) {
     /* */
   }
   if (indexed === 0) return { error: "Could not index" };
-  return { success: true, indexed };
+  await awardCroins(submittedBy, 5, `Crossi Search page submission (${indexed} pages)`);
+  return { success: true, indexed, croins: 5 };
 }
 
 export async function apiSubmitFile(
@@ -928,7 +929,8 @@ export async function apiSubmitFile(
   if (upErr) return { error: upErr.message };
   const r = await indexFileFromStorage(path, filename, mimeType, submittedBy);
   if (!r.ok) return { error: r.error || "Failed to index file" };
-  return { success: true, indexed: 1 };
+  await awardCroins(submittedBy, 6, "Crossi Search file submission");
+  return { success: true, indexed: 1, croins: 6 };
 }
 
 // ========== ADMIN: test iframe status ==========
