@@ -15,7 +15,8 @@ import {
 } from "@/lib/crossi.functions";
 import { useSession } from "@/lib/auth";
 import { addSearch, getCached, setCached } from "@/lib/search-history";
-
+import { ShortcutWidget } from "@/components/ShortcutWidget";
+import { detectShortcut } from "@/lib/search-shortcuts";
 
 const searchSchema = z.object({
   q: z.string().catch(""),
@@ -202,6 +203,7 @@ function SearchPage() {
     }
   }
 
+  const shortcut = detectShortcut(q);
   const imageResults = (results || []).filter((r) => r.file_kind === "image");
   const otherFileResults = (results || []).filter((r) => r.file_kind !== "image");
 
@@ -247,6 +249,7 @@ function SearchPage() {
       </div>
 
       <main className="max-w-3xl w-full mx-auto px-6 py-8 flex-1">
+        {tab === "web" && shortcut && <ShortcutWidget key={q} sc={shortcut} />}
         {loading && <SearchLoading />}
 
         {!loading && results && results.length === 0 && q && (
