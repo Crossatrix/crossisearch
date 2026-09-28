@@ -16,6 +16,7 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiCrossiAiRouteImport } from './routes/api/crossi-ai'
 import { Route as ApiAiOverviewRouteImport } from './routes/api/ai-overview'
 import { Route as ApiPublicSubmitRouteImport } from './routes/api/public/submit'
 import { Route as ApiPublicSearchRouteImport } from './routes/api/public/search'
@@ -55,6 +56,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCrossiAiRoute = ApiCrossiAiRouteImport.update({
+  id: '/api/crossi-ai',
+  path: '/api/crossi-ai',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAiOverviewRoute = ApiAiOverviewRouteImport.update({
   id: '/api/ai-overview',
   path: '/api/ai-overview',
@@ -80,6 +86,7 @@ export interface FileRoutesByFullPath {
   '/search': typeof SearchRoute
   '/submit': typeof SubmitRoute
   '/api/ai-overview': typeof ApiAiOverviewRoute
+  '/api/crossi-ai': typeof ApiCrossiAiRoute
   '/api/public/search': typeof ApiPublicSearchRoute
   '/api/public/submit': typeof ApiPublicSubmitRoute
 }
@@ -92,6 +99,7 @@ export interface FileRoutesByTo {
   '/search': typeof SearchRoute
   '/submit': typeof SubmitRoute
   '/api/ai-overview': typeof ApiAiOverviewRoute
+  '/api/crossi-ai': typeof ApiCrossiAiRoute
   '/api/public/search': typeof ApiPublicSearchRoute
   '/api/public/submit': typeof ApiPublicSubmitRoute
 }
@@ -105,6 +113,7 @@ export interface FileRoutesById {
   '/search': typeof SearchRoute
   '/submit': typeof SubmitRoute
   '/api/ai-overview': typeof ApiAiOverviewRoute
+  '/api/crossi-ai': typeof ApiCrossiAiRoute
   '/api/public/search': typeof ApiPublicSearchRoute
   '/api/public/submit': typeof ApiPublicSubmitRoute
 }
@@ -119,6 +128,7 @@ export interface FileRouteTypes {
     | '/search'
     | '/submit'
     | '/api/ai-overview'
+    | '/api/crossi-ai'
     | '/api/public/search'
     | '/api/public/submit'
   fileRoutesByTo: FileRoutesByTo
@@ -131,6 +141,7 @@ export interface FileRouteTypes {
     | '/search'
     | '/submit'
     | '/api/ai-overview'
+    | '/api/crossi-ai'
     | '/api/public/search'
     | '/api/public/submit'
   id:
@@ -143,6 +154,7 @@ export interface FileRouteTypes {
     | '/search'
     | '/submit'
     | '/api/ai-overview'
+    | '/api/crossi-ai'
     | '/api/public/search'
     | '/api/public/submit'
   fileRoutesById: FileRoutesById
@@ -156,6 +168,7 @@ export interface RootRouteChildren {
   SearchRoute: typeof SearchRoute
   SubmitRoute: typeof SubmitRoute
   ApiAiOverviewRoute: typeof ApiAiOverviewRoute
+  ApiCrossiAiRoute: typeof ApiCrossiAiRoute
   ApiPublicSearchRoute: typeof ApiPublicSearchRoute
   ApiPublicSubmitRoute: typeof ApiPublicSubmitRoute
 }
@@ -211,6 +224,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/crossi-ai': {
+      id: '/api/crossi-ai'
+      path: '/api/crossi-ai'
+      fullPath: '/api/crossi-ai'
+      preLoaderRoute: typeof ApiCrossiAiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/ai-overview': {
       id: '/api/ai-overview'
       path: '/api/ai-overview'
@@ -244,6 +264,7 @@ const rootRouteChildren: RootRouteChildren = {
   SearchRoute: SearchRoute,
   SubmitRoute: SubmitRoute,
   ApiAiOverviewRoute: ApiAiOverviewRoute,
+  ApiCrossiAiRoute: ApiCrossiAiRoute,
   ApiPublicSearchRoute: ApiPublicSearchRoute,
   ApiPublicSubmitRoute: ApiPublicSubmitRoute,
 }
