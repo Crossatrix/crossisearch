@@ -73,16 +73,9 @@ export const Route = createFileRoute("/api/crossi-ai")({
         url.searchParams.set("model", "Crossi_6.0_Lite");
         url.searchParams.set("prompt", parsed.prompt);
         try {
-          const res = await fetch(url.toString(), { signal: AbortSignal.timeout(45000) });
-          const raw = await res.text();
-          let text = raw;
-          try {
-            text = extract(JSON.parse(raw)) || raw;
-          } catch {
-            /* plain text */
-          }
-          if (!res.ok) return Response.json({ error: "AI request failed" }, { status: 502 });
-          return Response.json({ text: text.trim() });
+          const text = await askCrossi(url.toString());
+          if (!text) return Response.json({ error: "AI returned an empty response" }, { status: 502 });
+          return Response.json({ text });
         } catch {
           return Response.json({ error: "AI request timed out" }, { status: 504 });
         }

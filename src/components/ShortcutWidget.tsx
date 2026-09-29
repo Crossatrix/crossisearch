@@ -51,10 +51,25 @@ export function ShortcutWidget({ sc }: { sc: Shortcut }) {
   );
 }
 
-const LANGS = ["English", "German", "French", "Spanish", "Italian", "Portuguese", "Dutch", "Polish", "Turkish", "Russian", "Ukrainian", "Chinese", "Japanese", "Korean", "Arabic", "Hindi"];
+const LANGS: Record<string, string> = {
+  English: "en", German: "de", French: "fr", Spanish: "es", Italian: "it", Portuguese: "pt",
+  Dutch: "nl", Polish: "pl", Turkish: "tr", Russian: "ru", Ukrainian: "uk", Chinese: "zh-CN",
+  Japanese: "ja", Korean: "ko", Arabic: "ar", Hindi: "hi",
+};
+
+async function translateText(text: string, targetLang: string): Promise<string> {
+  // Free MyMemory translation API — no AI, no API key
+  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=autodetect|${encodeURIComponent(targetLang)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Translation failed");
+  const j = (await res.json()) as { responseData?: { translatedText?: string } };
+  const out = j.responseData?.translatedText?.trim();
+  if (!out) throw new Error("No translation returned");
+  return out;
+}
 
 function Translate({ sc }: { sc: Extract<Shortcut, { type: "translate" }> }) {
-  const initialTo = LANGS.find((l) => l.toLowerCase() === sc.to.toLowerCase()) || sc.to;
+  const initialTo = Object.keys(LANGS).find((l) => l.toLowerCase() === sc.to.toLowerCase()) || "English";
   const [text, setText] = useState(sc.text);
   const [to, setTo] = useState(initialTo);
   const [out, setOut] = useState("");
@@ -63,7 +78,7 @@ function Translate({ sc }: { sc: Extract<Shortcut, { type: "translate" }> }) {
     if (!text.trim()) return;
     setBusy(true);
     try {
-      setOut(await askAI(`Translate the following text to ${to}. Reply with ONLY the translation, nothing else.\n\n${text}`));
+      setOut(await translateText(text, LANGS[to] || "en"));
     } catch (e) {
       setOut((e as Error).message);
     } finally {
@@ -77,8 +92,7 @@ function Translate({ sc }: { sc: Extract<Shortcut, { type: "translate" }> }) {
       <div className={field + " min-h-[6rem] whitespace-pre-wrap"}>{busy ? <span className="text-muted-foreground">Translating…</span> : out}</div>
       <div className="flex gap-2 sm:col-span-2">
         <select value={to} onChange={(e) => setTo(e.target.value)} className={field}>
-          {!LANGS.includes(to) && <option>{to}</option>}
-          {LANGS.map((l) => <option key={l}>{l}</option>)}
+          {Object.keys(LANGS).map((l) => <option key={l}>{l}</option>)}
         </select>
         <button onClick={run} disabled={busy} className={btn}>Translate</button>
       </div>
