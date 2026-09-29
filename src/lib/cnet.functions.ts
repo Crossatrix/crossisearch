@@ -1,0 +1,190 @@
+import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
+
+const CROIN_URL = "https://digjxtmzafzcgytgcwmb.supabase.co/functions/v1/croins";
+const CNET_ADMINS = ["cross.a.trix.owner@hotmail.com", "moritz.loeseke7@gmail.com"];
+const label = z.string().regex(/^[a-z0-9-]{1,40}$/);
+const user = { user_id: z.string().min(1), email: z.string().min(1) };
+
+async function db() {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return supabaseAdmin;
+}
+const isCnetAdmin = (email: string) => CNET_ADMINS.includes(email.toLowerCase());
+const normPath = (p: string) => {
+  let s = ("/" + (p || "").replace(/^\/+/, "")).replace(/\/+$/, "");
+  if (!s || s === "/") s = "/index.html";
+  if (!/\.[a-z0-9]+$/i.test(s)) s += "/index.html";
+  return s.replace(/\/\/+/g, "/");
+};
+
+export const cnetIsAdmin = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ email: z.string() }))
+  .handler(async ({ data }) => ({ admin: isCnetAdmin(data.email) }));
+
+export const cnetListTlds = createServerFn({ method: "POST" }).handler(async () => {
+  const s = await db();
+  const { data } = await s.from("cnet_tlds").select("tld,price_croins").order("tld");
+  return { tlds: data ?? [] };
+});
+
+export const cnetAddTld = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ ...user, tld: label, price: z.number().int().min(0).max(1_000_000) }))
+  .handler(async ({ data }) => {
+    if (!isCnetAdmin(data.email)) return { error: "Not allowed" };
+    const s = await db();
+    const { error } = await s
+      .from("cnet_tlds")
+      .upsert({ tld: data.tld, price_croins: data.price, created_by: data.user_id });
+    return error ? { error: error.message } : { success: true };
+  });
+
+export const cnetBuyDomain = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ ...user, name: label, tld: label }))
+  .handler(async ({ data }) => {
+    const s = await db();
+    const domain = `${data.name}.${data.tld}`;
+    const { data: t } = await s.from("cnet_tlds").select("price_croins").eq("tld", data.tld).maybeSingle();
+    if (!t) return { error: "Unknown TLD" };
+    const { data: taken } = await s.from("cnet_domains").select("id").eq("domain", domain).maybeSingle();
+    if (taken) return { error: "Domain already taken" };
+    if (t.price_croins > 0) {
+      const key = process.env.CROSSATRIX_API_KEY;
+      if (!key) return { error: "Billing unavailable" };
+      const res = await fetch(CROIN_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": key },
+        body: JSON.stringify({
+          action: "debit",
+          user_id: data.user_id,
+          amount: t.price_croins,
+          description: `Crossinet domain ${domain}`,
+        }),
+      }).catch(() => null);
+      if (!res || !res.ok) return { error: `Not enough Croins. ${t.price_croins} required.` };
+    }
+    const { data: row, error } = await s
+      .from("cnet_domains")
+      .insert({ domain, tld: data.tld, owner_id: data.user_id, owner_email: data.email })
+      .select("id")
+      .single();
+    if (error) return { error: error.code === "23505" ? "Domain already taken" : error.message };
+    await s.from("cnet_files").insert({
+      domain_id: row.id,
+      host: domain,
+      path: "/index.html",
+      title: domain,
+      content: `<!doctype html><html><body style="font-family:sans-serif;padding:2rem"><h1>${domain}</h1><p>Welcome to my Crossinet site.</p></body></html>`,
+    });
+    return { success: true, domain };
+  });
+
+export const cnetMyDomains = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ user_id: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const s = await db();
+    const { data: rows } = await s.from("cnet_domains").select("id,domain").eq("owner_id", data.user_id).order("domain");
+    return { domains: rows ?? [] };
+  });
+
+async function ownedDomain(userId: string, domainId: string) {
+  const s = await db();
+  const { data } = await s.from("cnet_domains").select("id,domain").eq("id", domainId).eq("owner_id", userId).maybeSingle();
+  return data;
+}
+
+export const cnetListFiles = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ user_id: z.string().min(1), domain_id: z.string().uuid() }))
+  .handler(async ({ data }) => {
+    if (!(await ownedDomain(data.user_id, data.domain_id))) return { files: [] };
+    const s = await db();
+    const { data: rows } = await s.from("cnet_files").select("id,path,content,host").eq("domain_id", data.domain_id).order("path");
+    return { files: rows ?? [] };
+  });
+
+export const cnetSaveFile = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      user_id: z.string().min(1),
+      domain_id: z.string().uuid(),
+      host: z.string().regex(/^([a-z0-9-]{1,40}\.)*[a-z0-9-]{1,40}\.[a-z0-9-]{1,40}$/),
+      path: z.string().min(1).max(200),
+      content: z.string().max(500_000),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const d = await ownedDomain(data.user_id, data.domain_id);
+    if (!d) return { error: "Not your domain" };
+    if (data.host !== d.domain && !data.host.endsWith("." + d.domain)) return { error: "Host must be your domain or a subdomain" };
+    const path = normPath(data.path);
+    const title = data.content.match(/<title>([^<]*)<\/title>/i)?.[1]?.trim() || data.host + path;
+    const s = await db();
+    const { error } = await s.from("cnet_files").upsert(
+      { domain_id: d.id, host: data.host, path, content: data.content, title, updated_at: new Date().toISOString() },
+      { onConflict: "host,path" },
+    );
+    return error ? { error: error.message } : { success: true };
+  });
+
+export const cnetDeleteFile = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ user_id: z.string().min(1), domain_id: z.string().uuid(), id: z.string().uuid() }))
+  .handler(async ({ data }) => {
+    if (!(await ownedDomain(data.user_id, data.domain_id))) return { error: "Not your domain" };
+    const s = await db();
+    await s.from("cnet_files").delete().eq("id", data.id).eq("domain_id", data.domain_id);
+    return { success: true };
+  });
+
+export const cnetResolve = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ host: z.string().max(200), path: z.string().max(300) }))
+  .handler(async ({ data }) => {
+    const s = await db();
+    const host = data.host.toLowerCase();
+    const path = normPath(data.path);
+    const { data: f } = await s.from("cnet_files").select("content").eq("host", host).eq("path", path).maybeSingle();
+    if (!f) return { found: false as const };
+    let html = f.content;
+    if (path.endsWith(".html") || path.endsWith(".htm")) {
+      // Inline same-site CSS/JS so pages work inside the sandbox.
+      const dir = path.replace(/[^/]*$/, "");
+      const refs = new Set<string>();
+      for (const m of html.matchAll(/(?:href|src)=["']([^"':]+\.(?:css|js))["']/gi)) refs.add(m[1]);
+      if (refs.size) {
+        const paths = [...refs].map((r) => (r.startsWith("/") ? r : normPath(dir + r)));
+        const { data: assets } = await s.from("cnet_files").select("path,content").eq("host", host).in("path", paths);
+        const map = new Map((assets ?? []).map((a) => [a.path, a.content]));
+        html = html
+          .replace(/<link[^>]*href=["']([^"':]+\.css)["'][^>]*>/gi, (m, r) => {
+            const c = map.get(r.startsWith("/") ? r : normPath(dir + r));
+            return c != null ? `<style>${c}</style>` : m;
+          })
+          .replace(/<script([^>]*)src=["']([^"':]+\.js)["']([^>]*)><\/script>/gi, (m, a, r, b) => {
+            const c = map.get(r.startsWith("/") ? r : normPath(dir + r));
+            return c != null ? `<script${a}${b}>${c.replace(/<\/script/gi, "<\\/script")}</script>` : m;
+          });
+      }
+    }
+    return { found: true as const, html, path };
+  });
+
+export const cnetSearch = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ query: z.string().min(1).max(200) }))
+  .handler(async ({ data }) => {
+    const s = await db();
+    const q = data.query.replace(/[%_,()]/g, " ").trim();
+    if (!q) return { results: [] };
+    const { data: rows } = await s
+      .from("cnet_files")
+      .select("id,host,path,title,content")
+      .like("path", "%.htm%")
+      .or(`title.ilike.%${q}%,host.ilike.%${q}%,content.ilike.%${q}%`)
+      .limit(30);
+    return {
+      results: (rows ?? []).map((r) => ({
+        id: r.id,
+        url: `cnet://${r.host}${r.path === "/index.html" ? "" : r.path}`,
+        title: r.title || r.host,
+        snippet: r.content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180),
+      })),
+    };
+  });
