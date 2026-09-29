@@ -133,6 +133,100 @@ export type Database = {
         }
         Relationships: []
       }
+      cnet_domains: {
+        Row: {
+          created_at: string
+          domain: string
+          id: string
+          owner_email: string | null
+          owner_id: string
+          tld: string
+        }
+        Insert: {
+          created_at?: string
+          domain: string
+          id?: string
+          owner_email?: string | null
+          owner_id: string
+          tld: string
+        }
+        Update: {
+          created_at?: string
+          domain?: string
+          id?: string
+          owner_email?: string | null
+          owner_id?: string
+          tld?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cnet_domains_tld_fkey"
+            columns: ["tld"]
+            isOneToOne: false
+            referencedRelation: "cnet_tlds"
+            referencedColumns: ["tld"]
+          },
+        ]
+      }
+      cnet_files: {
+        Row: {
+          content: string
+          domain_id: string
+          host: string
+          id: string
+          path: string
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          content?: string
+          domain_id: string
+          host: string
+          id?: string
+          path: string
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          domain_id?: string
+          host?: string
+          id?: string
+          path?: string
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cnet_files_domain_id_fkey"
+            columns: ["domain_id"]
+            isOneToOne: false
+            referencedRelation: "cnet_domains"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cnet_tlds: {
+        Row: {
+          created_at: string
+          created_by: string
+          price_croins: number
+          tld: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          price_croins?: number
+          tld: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          price_croins?: number
+          tld?: string
+        }
+        Relationships: []
+      }
       pages: {
         Row: {
           content: string | null
