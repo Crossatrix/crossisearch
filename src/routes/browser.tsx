@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { z } from "zod";
+import { unzipSync, strFromU8 } from "fflate";
 import { Header } from "@/components/Header";
 import { useSession } from "@/lib/auth";
 import {
@@ -14,10 +15,13 @@ import {
   cnetMyDomains,
   cnetResolve,
   cnetSaveFile,
+  cnetRemoveTld,
+  cnetDeleteDomain,
+  cnetSaveMany,
 } from "@/lib/cnet.functions";
 
 export const Route = createFileRoute("/browser")({
-  validateSearch: z.object({ url: z.string().catch("cnet://domain.cat") }),
+  validateSearch: z.object({ url: z.string().catch("cnet://home.cat") }),
   head: () => ({
     meta: [
       { title: "Crossinet Browser — Crossi Search" },
@@ -113,6 +117,7 @@ function AdminPage() {
   const check = useServerFn(cnetIsAdmin);
   const list = useServerFn(cnetListTlds);
   const add = useServerFn(cnetAddTld);
+  const rm = useServerFn(cnetRemoveTld);
   const [admin, setAdmin] = useState(false);
   const [tlds, setTlds] = useState<{ tld: string; price_croins: number }[]>([]);
   const [tld, setTld] = useState("");
@@ -142,7 +147,7 @@ function AdminPage() {
         <button className="px-4 rounded-md bg-primary text-primary-foreground font-semibold">Add</button>
       </form>
       {msg && <p className="text-sm mb-4">{msg}</p>}
-      <ul className="space-y-1">{tlds.map((t) => <li key={t.tld} className="flex justify-between border-b border-border py-1"><span>.{t.tld}</span><span>{t.price_croins} Croins</span></li>)}</ul>
+      <ul className="space-y-1">{tlds.map((t) => <li key={t.tld} className="flex justify-between border-b border-border py-1"><span>.{t.tld}</span><span>{t.price_croins} Croins <button className="ml-3 text-destructive" onClick={async () => { if (!confirm(`Remove .${t.tld}? All its domains and sites will be deleted.`)) return; const r = await rm({ data: { user_id: session.user.id, email: session.user.email, tld: t.tld } }); setMsg("error" in r && r.error ? r.error : "Removed"); load(); }}>✕</button></span></li>)}</ul>
     </div>
   );
 }
@@ -195,6 +200,8 @@ function OptionsPage() {
   const files = useServerFn(cnetListFiles);
   const save = useServerFn(cnetSaveFile);
   const del = useServerFn(cnetDeleteFile);
+  const delDomain = useServerFn(cnetDeleteDomain);
+  const saveMany = useServerFn(cnetSaveMany);
   const [domains, setDomains] = useState<{ id: string; domain: string }[]>([]);
   const [sel, setSel] = useState<{ id: string; domain: string } | null>(null);
   const [list, setList] = useState<F[]>([]);
@@ -218,6 +225,38 @@ function OptionsPage() {
             className={"px-3 py-1.5 rounded-md border " + (sel?.id === d.id ? "border-primary text-primary" : "border-border")}>{d.domain}</button>
         ))}
       </div>
+      {sel && (
+        <div className="flex flex-wrap gap-3 items-center mb-4 text-sm">
+          <label className="px-3 py-1.5 rounded-md border border-border cursor-pointer hover:border-primary">
+            Upload ZIP to page {path.replace(/\/[^/]*\.[a-z0-9]+$/i, "") || "/"}
+            <input type="file" accept=".zip" className="hidden" onChange={async (e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (!file) return;
+              try {
+                const entries = unzipSync(new Uint8Array(await file.arrayBuffer()));
+                let list = Object.entries(entries).filter(([n, b]) => !n.endsWith("/") && !n.startsWith("__MACOSX") && /\.(html?|css|js|json|txt|svg|xml|md)$/i.test(n) && b.length < 500_000).map(([n, b]) => ({ path: n, content: strFromU8(b) }));
+                const top = list[0]?.path.split("/")[0];
+                if (top && list.every((f) => f.path.startsWith(top + "/"))) list = list.map((f) => ({ ...f, path: f.path.slice(top.length + 1) }));
+                if (!list.length) return setMsg("No HTML/CSS/JS files in ZIP");
+                const base = path.replace(/\/[^/]*\.[a-z0-9]+$/i, "");
+                const r = await saveMany({ data: { user_id: session.user.id, domain_id: sel.id, host: host.toLowerCase(), base, files: list.slice(0, 300) } });
+                setMsg("error" in r && r.error ? r.error : `Uploaded ${r.count} files`);
+                loadFiles(sel);
+              } catch { setMsg("Could not read ZIP"); }
+            }} />
+          </label>
+          <span className="text-muted-foreground">Set the page path below (e.g. /blog) first — the ZIP's index.html becomes that page.</span>
+          <button className="ml-auto text-destructive underline" onClick={async () => {
+            if (!confirm(`Delete ${sel.domain}? All files are removed and you get 75% of the price back.`)) return;
+            const r = await delDomain({ data: { user_id: session.user.id, domain_id: sel.id } });
+            if ("error" in r && r.error) return setMsg(r.error);
+            setMsg(`Deleted. Refunded ${r.refund} Croins.`);
+            setDomains((ds) => ds.filter((d) => d.id !== sel.id));
+            setSel(null);
+          }}>Delete domain (75% refund)</button>
+        </div>
+      )}
       {sel && (
         <div className="grid md:grid-cols-[220px_1fr] gap-4">
           <ul className="space-y-1 text-sm">

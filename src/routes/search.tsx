@@ -1,3 +1,4 @@
+import { cnetSearch } from "@/lib/cnet.functions";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
@@ -20,7 +21,7 @@ import { detectShortcut } from "@/lib/search-shortcuts";
 
 const searchSchema = z.object({
   q: z.string().catch(""),
-  tab: z.enum(["web", "files"]).catch("web"),
+  tab: z.enum(["web", "files", "cnet"]).catch("web"),
 });
 
 export const Route = createFileRoute("/search")({
@@ -80,9 +81,10 @@ function SearchPage() {
 
   useEffect(() => {
     setInput(q);
-    if (!q) {
-      setResults([]);
+    if (!q || tab === "cnet") {
+      setResults(tab === "cnet" ? null : []);
       setOv("");
+      setLoading(false);
       return;
     }
     const kind = tab === "files" ? "file" : "page";
@@ -155,7 +157,7 @@ function SearchPage() {
   }, [q, tab, search]);
 
 
-  const goTab = (next: "web" | "files") =>
+  const goTab = (next: "web" | "files" | "cnet") =>
     navigate({ to: "/search", search: { q, tab: next } });
 
   async function onDelete(id: string) {
@@ -226,12 +228,12 @@ function SearchPage() {
               className="flex-1 bg-transparent outline-none min-w-0"
               placeholder="Search"
             />
-            <HistoryButton currentTab={tab} />
+            <HistoryButton currentTab={tab === "cnet" ? "web" : tab} />
           </div>
 
         </form>
         <div className="max-w-3xl mx-auto px-6 pt-3 pb-0 flex gap-1">
-          {(["web", "files"] as const).map((t) => (
+          {(["web", "files", "cnet"] as const).map((t) => (
             <button
               key={t}
               onClick={() => goTab(t)}
@@ -242,7 +244,7 @@ function SearchPage() {
                   : "border-transparent text-muted-foreground hover:text-foreground")
               }
             >
-              {t === "web" ? "Web" : "Files"}
+              {t === "web" ? "Web" : t === "files" ? "Files" : "Crossi Net"}
             </button>
           ))}
         </div>
@@ -250,6 +252,7 @@ function SearchPage() {
 
       <main className="max-w-3xl w-full mx-auto px-6 py-8 flex-1">
         {tab === "web" && shortcut && <ShortcutWidget key={q} sc={shortcut} />}
+        {tab === "cnet" && <CnetResults q={q} />}
         {loading && <SearchLoading />}
 
         {!loading && results && results.length === 0 && q && (
@@ -502,4 +505,26 @@ function SearchPage() {
     </div>
   );
 
+}
+
+function CnetResults({ q }: { q: string }) {
+  const run = useServerFn(cnetSearch);
+  const [rows, setRows] = useState<{ id: string; url: string; title: string; snippet: string }[] | null>(null);
+  useEffect(() => {
+    setRows(null);
+    if (q) run({ data: { query: q } }).then((r) => setRows(r.results));
+  }, [q, run]);
+  if (!rows) return <SearchLoading />;
+  if (!rows.length) return <p className="text-center py-16">No Crossinet sites for "{q}"</p>;
+  return (
+    <div className="space-y-6">
+      {rows.map((r) => (
+        <div key={r.id}>
+          <a href={`/browser?url=${encodeURIComponent(r.url)}`} className="text-xs text-muted-foreground">{r.url}</a>
+          <a href={`/browser?url=${encodeURIComponent(r.url)}`} className="block text-lg text-primary hover:underline">{r.title}</a>
+          <p className="text-sm text-muted-foreground">{r.snippet}</p>
+        </div>
+      ))}
+    </div>
+  );
 }

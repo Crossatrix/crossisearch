@@ -27,6 +27,13 @@ export function Header() {
         </Link>
         <nav className="flex items-center gap-3 text-sm">
           <Link
+            to="/browser"
+            search={{ url: "cnet://home.cat" }}
+            className="px-3 py-1.5 rounded-md hover:bg-secondary transition"
+          >
+            Crossinet
+          </Link>
+          <Link
             to="/submit"
             className="px-3 py-1.5 rounded-md hover:bg-secondary transition"
           >
