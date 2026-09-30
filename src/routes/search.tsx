@@ -228,7 +228,7 @@ function SearchPage() {
               className="flex-1 bg-transparent outline-none min-w-0"
               placeholder="Search"
             />
-            <HistoryButton currentTab={tab} />
+            <HistoryButton currentTab={tab === "cnet" ? "web" : tab} />
           </div>
 
         </form>
