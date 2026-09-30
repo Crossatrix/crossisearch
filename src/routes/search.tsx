@@ -1,3 +1,4 @@
+import { cnetSearch } from "@/lib/cnet.functions";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
@@ -504,4 +505,26 @@ function SearchPage() {
     </div>
   );
 
+}
+
+function CnetResults({ q }: { q: string }) {
+  const run = useServerFn(cnetSearch);
+  const [rows, setRows] = useState<{ id: string; url: string; title: string; snippet: string }[] | null>(null);
+  useEffect(() => {
+    setRows(null);
+    if (q) run({ data: { query: q } }).then((r) => setRows(r.results));
+  }, [q, run]);
+  if (!rows) return <SearchLoading />;
+  if (!rows.length) return <p className="text-center py-16">No Crossinet sites for "{q}"</p>;
+  return (
+    <div className="space-y-6">
+      {rows.map((r) => (
+        <div key={r.id}>
+          <a href={`/browser?url=${encodeURIComponent(r.url)}`} className="text-xs text-muted-foreground">{r.url}</a>
+          <a href={`/browser?url=${encodeURIComponent(r.url)}`} className="block text-lg text-primary hover:underline">{r.title}</a>
+          <p className="text-sm text-muted-foreground">{r.snippet}</p>
+        </div>
+      ))}
+    </div>
+  );
 }
