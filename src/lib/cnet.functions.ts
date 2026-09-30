@@ -10,6 +10,21 @@ async function db() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
 }
+const RESERVED: Record<string, string> = {
+  "domain.cat": "",
+  "admin.domain.cat": "",
+  "home.cat": "cross.a.trix.owner@hotmail.com",
+};
+async function croin(action: "debit" | "credit", user_id: string, amount: number, description: string) {
+  const key = process.env.CROSSATRIX_API_KEY;
+  if (!key) return false;
+  const res = await fetch(CROIN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-api-key": key },
+    body: JSON.stringify({ action, user_id, amount, description }),
+  }).catch(() => null);
+  return !!res?.ok;
+}
 const isCnetAdmin = (email: string) => CNET_ADMINS.includes(email.toLowerCase());
 const normPath = (p: string) => {
   let s = ("/" + (p || "").replace(/^\/+/, "")).replace(/\/+$/, "");
@@ -48,7 +63,9 @@ export const cnetBuyDomain = createServerFn({ method: "POST" })
     if (!t) return { error: "Unknown TLD" };
     const { data: taken } = await s.from("cnet_domains").select("id").eq("domain", domain).maybeSingle();
     if (taken) return { error: "Domain already taken" };
-    if (t.price_croins > 0) {
+    const reserved = RESERVED[domain];
+    if (reserved !== undefined && reserved !== data.email.toLowerCase()) return { error: "This domain is reserved" };
+    if (t.price_croins > 0 && reserved === undefined) {
       const key = process.env.CROSSATRIX_API_KEY;
       if (!key) return { error: "Billing unavailable" };
       const res = await fetch(CROIN_URL, {
@@ -187,4 +204,61 @@ export const cnetSearch = createServerFn({ method: "POST" })
         snippet: r.content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180),
       })),
     };
+  });
+
+export const cnetRemoveTld = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ ...user, tld: label }))
+  .handler(async ({ data }) => {
+    if (!isCnetAdmin(data.email)) return { error: "Not allowed" };
+    const s = await db();
+    const { data: ds } = await s.from("cnet_domains").select("id").eq("tld", data.tld);
+    const ids = (ds ?? []).map((d) => d.id);
+    if (ids.length) {
+      await s.from("cnet_files").delete().in("domain_id", ids);
+      await s.from("cnet_domains").delete().in("id", ids);
+    }
+    const { error } = await s.from("cnet_tlds").delete().eq("tld", data.tld);
+    return error ? { error: error.message } : { success: true };
+  });
+
+export const cnetDeleteDomain = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ user_id: z.string().min(1), domain_id: z.string().uuid() }))
+  .handler(async ({ data }) => {
+    const d = await ownedDomain(data.user_id, data.domain_id);
+    if (!d) return { error: "Not your domain" };
+    const s = await db();
+    const tld = d.domain.split(".").pop()!;
+    const { data: t } = await s.from("cnet_tlds").select("price_croins").eq("tld", tld).maybeSingle();
+    await s.from("cnet_files").delete().eq("domain_id", d.id);
+    const { error } = await s.from("cnet_domains").delete().eq("id", d.id);
+    if (error) return { error: error.message };
+    const refund = RESERVED[d.domain] !== undefined ? 0 : Math.floor((t?.price_croins ?? 0) * 0.75);
+    if (refund > 0) await croin("credit", data.user_id, refund, `Refund for Crossinet domain ${d.domain}`);
+    return { success: true, refund };
+  });
+
+export const cnetSaveMany = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      user_id: z.string().min(1),
+      domain_id: z.string().uuid(),
+      host: z.string().regex(/^([a-z0-9-]{1,40}\.)*[a-z0-9-]{1,40}\.[a-z0-9-]{1,40}$/),
+      base: z.string().max(200),
+      files: z.array(z.object({ path: z.string().min(1).max(200), content: z.string().max(500_000) })).min(1).max(300),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const d = await ownedDomain(data.user_id, data.domain_id);
+    if (!d) return { error: "Not your domain" };
+    if (data.host !== d.domain && !data.host.endsWith("." + d.domain)) return { error: "Host must be your domain or a subdomain" };
+    const base = ("/" + data.base.replace(/^\/+|\/+$/g, "")).replace(/^\/$/, "");
+    const now = new Date().toISOString();
+    const rows = data.files.map((f) => {
+      const path = normPath(base + "/" + f.path);
+      const title = f.content.match(/<title>([^<]*)<\/title>/i)?.[1]?.trim() || data.host + path;
+      return { domain_id: d.id, host: data.host, path, content: f.content, title, updated_at: now };
+    });
+    const s = await db();
+    const { error } = await s.from("cnet_files").upsert(rows, { onConflict: "host,path" });
+    return error ? { error: error.message } : { success: true, count: rows.length };
   });
