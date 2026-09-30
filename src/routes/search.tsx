@@ -20,7 +20,7 @@ import { detectShortcut } from "@/lib/search-shortcuts";
 
 const searchSchema = z.object({
   q: z.string().catch(""),
-  tab: z.enum(["web", "files"]).catch("web"),
+  tab: z.enum(["web", "files", "cnet"]).catch("web"),
 });
 
 export const Route = createFileRoute("/search")({
@@ -80,9 +80,10 @@ function SearchPage() {
 
   useEffect(() => {
     setInput(q);
-    if (!q) {
-      setResults([]);
+    if (!q || tab === "cnet") {
+      setResults(tab === "cnet" ? null : []);
       setOv("");
+      setLoading(false);
       return;
     }
     const kind = tab === "files" ? "file" : "page";
@@ -155,7 +156,7 @@ function SearchPage() {
   }, [q, tab, search]);
 
 
-  const goTab = (next: "web" | "files") =>
+  const goTab = (next: "web" | "files" | "cnet") =>
     navigate({ to: "/search", search: { q, tab: next } });
 
   async function onDelete(id: string) {
@@ -231,7 +232,7 @@ function SearchPage() {
 
         </form>
         <div className="max-w-3xl mx-auto px-6 pt-3 pb-0 flex gap-1">
-          {(["web", "files"] as const).map((t) => (
+          {(["web", "files", "cnet"] as const).map((t) => (
             <button
               key={t}
               onClick={() => goTab(t)}
@@ -242,7 +243,7 @@ function SearchPage() {
                   : "border-transparent text-muted-foreground hover:text-foreground")
               }
             >
-              {t === "web" ? "Web" : "Files"}
+              {t === "web" ? "Web" : t === "files" ? "Files" : "Crossi Net"}
             </button>
           ))}
         </div>
@@ -250,6 +251,7 @@ function SearchPage() {
 
       <main className="max-w-3xl w-full mx-auto px-6 py-8 flex-1">
         {tab === "web" && shortcut && <ShortcutWidget key={q} sc={shortcut} />}
+        {tab === "cnet" && <CnetResults q={q} />}
         {loading && <SearchLoading />}
 
         {!loading && results && results.length === 0 && q && (
