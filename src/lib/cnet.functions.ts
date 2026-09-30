@@ -262,3 +262,43 @@ export const cnetSaveMany = createServerFn({ method: "POST" })
     const { error } = await s.from("cnet_files").upsert(rows, { onConflict: "host,path" });
     return error ? { error: error.message } : { success: true, count: rows.length };
   });
+
+// ---- Browser tabs + favorites (per account) ----
+const entry = z.object({ url: z.string().max(300), title: z.string().max(200) });
+
+export const cnetGetState = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ user_id: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const s = await db();
+    const { data: row } = await s
+      .from("cnet_browser_state")
+      .select("tabs,favorites,active_index")
+      .eq("user_id", data.user_id)
+      .maybeSingle();
+    return {
+      tabs: (row?.tabs as { url: string; title: string }[] | null) ?? [],
+      favorites: (row?.favorites as { url: string; title: string }[] | null) ?? [],
+      active: row?.active_index ?? 0,
+    };
+  });
+
+export const cnetSaveState = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      user_id: z.string().min(1),
+      tabs: z.array(entry).max(30),
+      favorites: z.array(entry).max(100),
+      active: z.number().int().min(0).max(30),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const s = await db();
+    await s.from("cnet_browser_state").upsert({
+      user_id: data.user_id,
+      tabs: data.tabs,
+      favorites: data.favorites,
+      active_index: data.active,
+      updated_at: new Date().toISOString(),
+    });
+    return { success: true };
+  });
