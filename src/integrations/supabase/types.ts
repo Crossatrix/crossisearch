@@ -133,6 +133,30 @@ export type Database = {
         }
         Relationships: []
       }
+      cnet_browser_state: {
+        Row: {
+          active_index: number
+          favorites: Json
+          tabs: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active_index?: number
+          favorites?: Json
+          tabs?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active_index?: number
+          favorites?: Json
+          tabs?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       cnet_domains: {
         Row: {
           created_at: string
