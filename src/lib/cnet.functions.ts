@@ -100,7 +100,7 @@ export const cnetMyDomains = createServerFn({ method: "POST" })
   .inputValidator(z.object({ user_id: z.string().min(1) }))
   .handler(async ({ data }) => {
     const s = await db();
-    const { data: rows } = await s.from("cnet_domains").select("id,domain").eq("owner_id", data.user_id).order("domain");
+    const { data: rows } = await s.from("cnet_domains").select("id,domain,console_disabled").eq("owner_id", data.user_id).order("domain");
     return { domains: rows ?? [] };
   });
 
@@ -152,15 +152,33 @@ export const cnetDeleteFile = createServerFn({ method: "POST" })
     return { success: true };
   });
 
+export const cnetSetConsole = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ user_id: z.string().min(1), domain_id: z.string().uuid(), disabled: z.boolean() }))
+  .handler(async ({ data }) => {
+    if (!(await ownedDomain(data.user_id, data.domain_id))) return { error: "Not your domain" };
+    const s = await db();
+    const { error } = await s.from("cnet_domains").update({ console_disabled: data.disabled }).eq("id", data.domain_id);
+    return error ? { error: error.message } : { success: true };
+  });
+
+// Publishers can also opt a single page out with <meta name="cnet-console" content="off">.
+const META_OFF = [
+  /<meta[^>]*name=["']cnet-console["'][^>]*content=["'](?:off|disabled|false|no)["'][^>]*>/i,
+  /<meta[^>]*content=["'](?:off|disabled|false|no)["'][^>]*name=["']cnet-console["'][^>]*>/i,
+];
+
 export const cnetResolve = createServerFn({ method: "POST" })
   .inputValidator(z.object({ host: z.string().max(200), path: z.string().max(300) }))
   .handler(async ({ data }) => {
     const s = await db();
     const host = data.host.toLowerCase();
     const path = normPath(data.path);
-    const { data: f } = await s.from("cnet_files").select("content").eq("host", host).eq("path", path).maybeSingle();
+    const { data: f } = await s.from("cnet_files").select("content,domain_id").eq("host", host).eq("path", path).maybeSingle();
     if (!f) return { found: false as const };
+    const { data: dom } = await s.from("cnet_domains").select("console_disabled").eq("id", f.domain_id).maybeSingle();
     let html = f.content;
+    const inlined: string[] = [];
+    const missing: string[] = [];
     if (path.endsWith(".html") || path.endsWith(".htm")) {
       // Inline same-site CSS/JS so pages work inside the sandbox.
       const dir = path.replace(/[^/]*$/, "");
@@ -172,16 +190,23 @@ export const cnetResolve = createServerFn({ method: "POST" })
         const map = new Map((assets ?? []).map((a) => [a.path, a.content]));
         html = html
           .replace(/<link[^>]*href=["']([^"':]+\.css)["'][^>]*>/gi, (m, r) => {
-            const c = map.get(r.startsWith("/") ? r : normPath(dir + r));
+            const key = r.startsWith("/") ? r : normPath(dir + r);
+            const c = map.get(key);
+            (c != null ? inlined : missing).push(key);
             return c != null ? `<style>${c}</style>` : m;
           })
           .replace(/<script([^>]*)src=["']([^"':]+\.js)["']([^>]*)><\/script>/gi, (m, a, r, b) => {
-            const c = map.get(r.startsWith("/") ? r : normPath(dir + r));
+            const key = r.startsWith("/") ? r : normPath(dir + r);
+            const c = map.get(key);
+            (c != null ? inlined : missing).push(key);
             return c != null ? `<script${a}${b}>${c.replace(/<\/script/gi, "<\\/script")}</script>` : m;
           });
       }
     }
-    return { found: true as const, html, path };
+    const metaOff = META_OFF.some((re) => re.test(f.content));
+    const consoleAllowed = !(dom?.console_disabled ?? false) && !metaOff;
+    const disabledBy = dom?.console_disabled ? "domain" : metaOff ? "page" : null;
+    return { found: true as const, html, path, consoleAllowed, disabledBy, inlined, missing };
   });
 
 export const cnetSearch = createServerFn({ method: "POST" })
