@@ -1,10 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { useBrowserState, CNET_HOME, titleFor } from "@/lib/cnet-browser";
 import { z } from "zod";
 import { unzipSync, strFromU8 } from "fflate";
 import { Header } from "@/components/Header";
+import { DevTools } from "@/components/DevTools";
+import { DEV_BRIDGE, DEV_HELP, type DevEntry, type DevKind } from "@/lib/cnet-devtools";
 import { useSession } from "@/lib/auth";
 import {
   cnetAddTld,
@@ -19,6 +21,7 @@ import {
   cnetRemoveTld,
   cnetDeleteDomain,
   cnetSaveMany,
+  cnetSetConsole,
 } from "@/lib/cnet.functions";
 
 export const Route = createFileRoute("/browser")({
@@ -54,6 +57,62 @@ function BrowserPage() {
   const { host, path } = parse(url);
   const { state, ready, update } = useBrowserState();
   const restored = useRef(false);
+
+  // ---- Developer console ----
+  type Site = { allowed: boolean; disabledBy: "domain" | "page" | null; host: string; html: string };
+  const [devOpen, setDevOpen] = useState(false);
+  const [site, setSite] = useState<Site | null>(null);
+  const [override, setOverride] = useState<string | null>(null);
+  const [dev, setDev] = useState<DevEntry[]>([]);
+  const devId = useRef(0);
+  const devT0 = useRef(Date.now());
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const siteRef = useRef<Site | null>(null);
+  siteRef.current = site;
+  const push = useCallback((kind: DevKind, text: string, ts = Date.now()) => {
+    setDev((d) => [...d.slice(-999), { id: ++devId.current, ts, kind, text }]);
+  }, []);
+  // New page = fresh log, original source.
+  useEffect(() => {
+    setDev([]);
+    setSite(null);
+    setOverride(null);
+    devT0.current = Date.now();
+  }, [host, path]);
+  // Everything the page reports (console output, errors, network, timers, events…).
+  useEffect(() => {
+    const kinds: DevKind[] = ["log", "info", "warn", "error", "debug", "net", "event", "timer", "script", "lifecycle"];
+    const h = (e: MessageEvent) => {
+      const w = iframeRef.current?.contentWindow;
+      const m = e.data as { cnetDev?: string; d?: unknown; ts?: number } | null;
+      if (!w || e.source !== w || typeof m?.cnetDev !== "string") return;
+      if (!siteRef.current?.allowed) return;
+      const ts = typeof m.ts === "number" ? m.ts : Date.now();
+      if (m.cnetDev === "clear") return setDev([]);
+      if (m.cnetDev === "result") {
+        const r = m.d as { ok: boolean; v: string };
+        return push(r.ok ? "result" : "error", String(r.v), ts);
+      }
+      if (kinds.includes(m.cnetDev as DevKind)) push(m.cnetDev as DevKind, String(m.d), ts);
+    };
+    window.addEventListener("message", h);
+    return () => window.removeEventListener("message", h);
+  }, [push]);
+  const runConsole = (code: string) => {
+    push("input", code);
+    const c = code.trim().replace(/;$/, "");
+    if (c === "clear" || c === "clear()") return setDev([]);
+    if (c === "help" || c === "help()") return push("info", DEV_HELP);
+    iframeRef.current?.contentWindow?.postMessage({ cnetEval: code }, "*");
+  };
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "F12") { e.preventDefault(); setDevOpen((v) => !v); }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
+
   const go = (u: string) => navigate({ to: "/browser", search: { url: u.startsWith("cnet://") ? u : "cnet://" + u } });
 
   // Restore last active tab on first load when opened at the default page.
@@ -118,7 +177,23 @@ function BrowserPage() {
   if (host === "admin.domain.cat") body = <AdminPage />;
   else if (host === "domain.cat" && path.startsWith("/options")) body = <OptionsPage />;
   else if (host === "domain.cat") body = <BuyPage go={go} />;
-  else body = <SiteView host={host} path={path} />;
+  else
+    body = (
+      <SiteView
+        host={host}
+        path={path}
+        iframeRef={iframeRef}
+        override={override}
+        onSite={(s) => {
+          setSite(s);
+          if (s?.allowed) {
+            push("system", `Resolved cnet://${host}${path}`);
+            s.inlined.forEach((f) => push("system", `Inlined ${f} into the page`));
+            s.missing.forEach((f) => push("warn", `Referenced file not found on this site: ${f}`));
+          }
+        }}
+      />
+    );
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -151,6 +226,14 @@ function BrowserPage() {
         <input value={input} onChange={(e) => setInput(e.target.value)} className="flex-1 min-w-0 bg-card border border-border rounded-full px-4 py-1.5 outline-none focus:border-primary" />
         <button type="button" aria-label="Favorite" onClick={toggleFav} className={"px-2 text-xl " + (isFav ? "text-primary" : "text-muted-foreground")}>{isFav ? "★" : "☆"}</button>
         <button type="button" onClick={() => setShowFav((v) => !v)} className="px-3 rounded-md border border-border text-sm">Favorites</button>
+        <button
+          type="button"
+          onClick={() => setDevOpen((v) => !v)}
+          title={site && !site.allowed ? "The publisher disabled the console on this site" : "Developer console (F12)"}
+          className={"px-3 rounded-md border text-sm " + (devOpen ? "border-primary text-primary" : "border-border")}
+        >
+          {site && !site.allowed ? "🔒 Console" : "🛠 Console"}
+        </button>
         <button className="px-4 rounded-full bg-primary text-primary-foreground font-semibold">Go</button>
         {showFav && (
           <div className="absolute right-4 top-full mt-1 z-20 w-72 bg-card border border-border rounded-md shadow-lg p-2">
@@ -165,26 +248,70 @@ function BrowserPage() {
         )}
       </form>
       <div className="flex-1 flex flex-col">{body}</div>
+      {devOpen && (
+        <DevTools
+          entries={dev}
+          t0={devT0.current}
+          site={site}
+          source={override ?? site?.html ?? ""}
+          edited={override != null}
+          onRun={runConsole}
+          onClear={() => setDev([])}
+          onApplySource={(h) => {
+            setOverride(h);
+            push("system", "Source edited — page re-rendered (temporary, reload to undo)");
+          }}
+          onResetSource={() => {
+            setOverride(null);
+            push("system", "Source reset to the published version");
+          }}
+          onClose={() => setDevOpen(false)}
+        />
+      )}
     </div>
   );
 }
 
-function SiteView({ host, path }: { host: string; path: string }) {
+type SiteInfo = { allowed: boolean; disabledBy: "domain" | "page" | null; host: string; html: string; inlined: string[]; missing: string[] };
+
+function SiteView({
+  host, path, iframeRef, override, onSite,
+}: {
+  host: string;
+  path: string;
+  iframeRef: RefObject<HTMLIFrameElement | null>;
+  override: string | null;
+  onSite: (s: SiteInfo | null) => void;
+}) {
   const resolve = useServerFn(cnetResolve);
-  const [html, setHtml] = useState<string | null | undefined>(undefined);
+  const [page, setPage] = useState<{ html: string; allowed: boolean } | null | undefined>(undefined);
   useEffect(() => {
-    setHtml(undefined);
-    resolve({ data: { host, path } }).then((r) => setHtml(r.found ? r.html : null));
+    let cancelled = false;
+    setPage(undefined);
+    resolve({ data: { host, path } }).then((r) => {
+      if (cancelled) return;
+      if (!r.found) {
+        setPage(null);
+        return onSite(null);
+      }
+      setPage({ html: r.html, allowed: r.consoleAllowed });
+      onSite({ allowed: r.consoleAllowed, disabledBy: r.disabledBy, host, html: r.html, inlined: r.inlined, missing: r.missing });
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [host, path, resolve]);
-  if (html === undefined) return <p className="p-8 text-muted-foreground">Loading…</p>;
-  if (html === null)
+  if (page === undefined) return <p className="p-8 text-muted-foreground">Loading…</p>;
+  if (page === null)
     return (
       <div className="p-8 text-center">
         <h1 className="text-2xl font-bold mb-2">Site not found</h1>
         <p className="text-muted-foreground">cnet://{host}{path} doesn't exist. Buy domains at cnet://domain.cat</p>
       </div>
     );
-  return <iframe title={host} srcDoc={NAV_SCRIPT + html} sandbox="allow-scripts allow-forms allow-modals" className="flex-1 w-full min-h-[80vh] bg-white" />;
+  // When the publisher disabled the console, the bridge is never injected and edits are ignored.
+  const doc = page.allowed ? DEV_BRIDGE + NAV_SCRIPT + (override ?? page.html) : NAV_SCRIPT + page.html;
+  return <iframe ref={iframeRef} title={host} srcDoc={doc} sandbox="allow-scripts allow-forms allow-modals" className="flex-1 w-full min-h-[80vh] bg-white" />;
 }
 
 function LoginNeeded() {
@@ -281,8 +408,9 @@ function OptionsPage() {
   const del = useServerFn(cnetDeleteFile);
   const delDomain = useServerFn(cnetDeleteDomain);
   const saveMany = useServerFn(cnetSaveMany);
-  const [domains, setDomains] = useState<{ id: string; domain: string }[]>([]);
-  const [sel, setSel] = useState<{ id: string; domain: string } | null>(null);
+  const [domains, setDomains] = useState<{ id: string; domain: string; console_disabled: boolean }[]>([]);
+  const setConsole = useServerFn(cnetSetConsole);
+  const [sel, setSel] = useState<{ id: string; domain: string; console_disabled: boolean } | null>(null);
   const [list, setList] = useState<F[]>([]);
   const [host, setHost] = useState("");
   const [path, setPath] = useState("/index.html");
@@ -335,6 +463,29 @@ function OptionsPage() {
             setSel(null);
           }}>Delete domain (75% refund)</button>
         </div>
+      )}
+      {sel && (
+        <label className="flex items-start gap-2 mb-4 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={sel.console_disabled}
+            onChange={async (e) => {
+              const disabled = e.target.checked;
+              const r = await setConsole({ data: { user_id: session.user.id, domain_id: sel.id, disabled } });
+              if ("error" in r && r.error) return setMsg(r.error);
+              setSel({ ...sel, console_disabled: disabled });
+              setDomains((ds) => ds.map((d) => (d.id === sel.id ? { ...d, console_disabled: disabled } : d)));
+              setMsg(disabled ? "Visitors can no longer use the console on this domain" : "Visitors can use the console again");
+            }}
+          />
+          <span>
+            Disable the developer console for visitors of {sel.domain}
+            <span className="block text-muted-foreground">
+              To turn it off for a single page instead, add <code>&lt;meta name="cnet-console" content="off"&gt;</code> to its &lt;head&gt;.
+            </span>
+          </span>
+        </label>
       )}
       {sel && (
         <div className="grid md:grid-cols-[220px_1fr] gap-4">
