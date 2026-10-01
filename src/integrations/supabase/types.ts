@@ -159,6 +159,7 @@ export type Database = {
       }
       cnet_domains: {
         Row: {
+          console_disabled: boolean
           created_at: string
           domain: string
           id: string
@@ -167,6 +168,7 @@ export type Database = {
           tld: string
         }
         Insert: {
+          console_disabled?: boolean
           created_at?: string
           domain: string
           id?: string
@@ -175,6 +177,7 @@ export type Database = {
           tld: string
         }
         Update: {
+          console_disabled?: boolean
           created_at?: string
           domain?: string
           id?: string
