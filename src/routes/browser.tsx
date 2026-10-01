@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useBrowserState, CNET_HOME, titleFor } from "@/lib/cnet-browser";
 import { z } from "zod";
 import { unzipSync, strFromU8 } from "fflate";
 import { Header } from "@/components/Header";
@@ -49,8 +50,56 @@ function BrowserPage() {
   const { url } = Route.useSearch();
   const navigate = useNavigate();
   const [input, setInput] = useState(url);
+  const [showFav, setShowFav] = useState(false);
   const { host, path } = parse(url);
+  const { state, ready, update } = useBrowserState();
+  const restored = useRef(false);
   const go = (u: string) => navigate({ to: "/browser", search: { url: u.startsWith("cnet://") ? u : "cnet://" + u } });
+
+  // Restore last active tab on first load when opened at the default page.
+  useEffect(() => {
+    if (!ready || restored.current) return;
+    restored.current = true;
+    const saved = state.tabs[state.active]?.url;
+    if (url === CNET_HOME && saved && saved !== url) go(saved);
+  }, [ready, state]);
+
+  // Keep the active tab in sync with the current address.
+  useEffect(() => {
+    if (!ready || !restored.current) return;
+    const cur = state.tabs[state.active];
+    if (cur?.url === url) return;
+    update((s) => {
+      const tabs = s.tabs.length ? [...s.tabs] : [{ url, title: titleFor(url) }];
+      const a = Math.min(s.active, tabs.length - 1);
+      tabs[a] = { url, title: titleFor(url) };
+      return { ...s, tabs, active: a };
+    });
+  }, [url, ready]);
+
+  const switchTab = (i: number) => {
+    update((s) => ({ ...s, active: i }));
+    go(state.tabs[i].url);
+  };
+  const newTab = () => {
+    update((s) => ({ ...s, tabs: [...s.tabs, { url: CNET_HOME, title: titleFor(CNET_HOME) }], active: s.tabs.length }));
+    go(CNET_HOME);
+  };
+  const closeTab = (i: number) => {
+    const tabs = state.tabs.filter((_, j) => j !== i);
+    if (!tabs.length) tabs.push({ url: CNET_HOME, title: titleFor(CNET_HOME) });
+    let active = state.active;
+    if (i < active || active >= tabs.length) active = Math.max(0, active - 1);
+    if (i === state.active) active = Math.min(i, tabs.length - 1);
+    update((s) => ({ ...s, tabs, active }));
+    go(tabs[active].url);
+  };
+  const isFav = state.favorites.some((f) => f.url === url);
+  const toggleFav = () =>
+    update((s) => ({
+      ...s,
+      favorites: isFav ? s.favorites.filter((f) => f.url !== url) : [...s.favorites, { url, title: titleFor(url) }],
+    }));
 
   useEffect(() => setInput(url), [url]);
   useEffect(() => {
@@ -74,16 +123,46 @@ function BrowserPage() {
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
+      <div className="px-2 pt-2 flex gap-1 overflow-x-auto border-b border-border">
+        {state.tabs.map((t, i) => (
+          <div
+            key={i}
+            className={"flex items-center gap-2 max-w-[200px] px-3 py-1.5 rounded-t-md border border-b-0 text-sm cursor-pointer " + (i === state.active ? "border-primary bg-card text-primary" : "border-border text-muted-foreground")}
+            onClick={() => switchTab(i)}
+          >
+            <span className="truncate">{t.title}</span>
+            <button
+              aria-label="Close tab"
+              onClick={(e) => { e.stopPropagation(); closeTab(i); }}
+              className="hover:text-destructive"
+            >✕</button>
+          </div>
+        ))}
+        <button aria-label="New tab" onClick={newTab} className="px-3 text-lg hover:text-primary">+</button>
+      </div>
       <form
         onSubmit={(e) => {
           e.preventDefault();
           if (input.trim()) go(input.trim());
         }}
-        className="px-4 py-2 border-b border-border flex gap-2"
+        className="px-4 py-2 border-b border-border flex gap-2 relative"
       >
         <button type="button" onClick={() => history.back()} className="px-3 rounded-md border border-border">←</button>
-        <input value={input} onChange={(e) => setInput(e.target.value)} className="flex-1 bg-card border border-border rounded-full px-4 py-1.5 outline-none focus:border-primary" />
+        <input value={input} onChange={(e) => setInput(e.target.value)} className="flex-1 min-w-0 bg-card border border-border rounded-full px-4 py-1.5 outline-none focus:border-primary" />
+        <button type="button" aria-label="Favorite" onClick={toggleFav} className={"px-2 text-xl " + (isFav ? "text-primary" : "text-muted-foreground")}>{isFav ? "★" : "☆"}</button>
+        <button type="button" onClick={() => setShowFav((v) => !v)} className="px-3 rounded-md border border-border text-sm">Favorites</button>
         <button className="px-4 rounded-full bg-primary text-primary-foreground font-semibold">Go</button>
+        {showFav && (
+          <div className="absolute right-4 top-full mt-1 z-20 w-72 bg-card border border-border rounded-md shadow-lg p-2">
+            {state.favorites.length === 0 && <p className="text-sm text-muted-foreground p-2">No favorites yet. Click ☆ to add one.</p>}
+            {state.favorites.map((f) => (
+              <div key={f.url} className="flex items-center gap-2 text-sm">
+                <button type="button" className="flex-1 truncate text-left px-2 py-1 rounded hover:text-primary" onClick={() => { setShowFav(false); go(f.url); }}>{f.title}</button>
+                <button type="button" aria-label="Remove favorite" className="text-destructive px-1" onClick={() => update((s) => ({ ...s, favorites: s.favorites.filter((x) => x.url !== f.url) }))}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
       </form>
       <div className="flex-1 flex flex-col">{body}</div>
     </div>
