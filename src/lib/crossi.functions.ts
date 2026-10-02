@@ -255,8 +255,17 @@ export const crossatrixLogin = createServerFn({ method: "POST" })
       console.error("admin auto-grant failed", e);
     }
 
-    return body as { user: { id: string; email: string }; access_token: string };
+    const u = (body as { user?: { id: string; email: string } }).user;
+    if (!u?.id || !u?.email) return { error: "Login failed" };
+    const { signSession } = await import("./session.server");
+    return {
+      ...(body as { user: { id: string; email: string }; access_token: string }),
+      session_token: await signSession(u.id, u.email),
+    };
   });
+
+const isCaller = async (userId: string, email?: string) =>
+  (await import("./session.server")).isCaller(userId, email);
 
 // ========== INTERNAL: shared indexing primitives ==========
 async function alreadyIndexed(url: string): Promise<boolean> {
@@ -631,6 +640,7 @@ export const isAdmin = createServerFn({ method: "POST" })
   });
 
 async function requireAdmin(userId: string): Promise<boolean> {
+  if (!(await isCaller(userId))) return false;
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data } = await supabaseAdmin
     .from("user_roles")
