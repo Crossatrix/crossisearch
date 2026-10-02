@@ -163,6 +163,7 @@ function BrowserPage() {
   useEffect(() => setInput(url), [url]);
   useEffect(() => {
     const h = (e: MessageEvent) => {
+      if (!iframeRef.current || e.source !== iframeRef.current.contentWindow) return;
       const t = (e.data as { cnetNav?: string })?.cnetNav;
       if (typeof t !== "string") return;
       if (t.startsWith("cnet://")) return go(t);

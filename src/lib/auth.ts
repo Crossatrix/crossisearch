@@ -1,6 +1,6 @@
 // Crossatrix auth stored in localStorage.
 export type CrossatrixUser = { id: string; email: string };
-export type CrossatrixSession = { user: CrossatrixUser; access_token: string };
+export type CrossatrixSession = { user: CrossatrixUser; access_token: string; session_token?: string };
 
 const KEY = "crossi_session";
 
@@ -9,7 +9,13 @@ export function getSession(): CrossatrixSession | null {
   const raw = localStorage.getItem(KEY);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as CrossatrixSession;
+    const s = JSON.parse(raw) as CrossatrixSession;
+    // Sessions from before server-signed tokens must sign in again.
+    if (!s.session_token) {
+      localStorage.removeItem(KEY);
+      return null;
+    }
+    return s;
   } catch {
     return null;
   }

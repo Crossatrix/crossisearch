@@ -32,7 +32,7 @@ function AuthPage() {
       if ("error" in res && res.error) {
         setErr(res.error);
       } else if ("access_token" in res) {
-        setSession({ user: res.user, access_token: res.access_token });
+        setSession({ user: res.user, access_token: res.access_token, session_token: res.session_token });
         navigate({ to: "/" });
       }
     } catch (e) {

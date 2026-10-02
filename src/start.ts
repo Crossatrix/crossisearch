@@ -2,6 +2,7 @@ import { createStart, createMiddleware } from "@tanstack/react-start";
 
 import { renderErrorPage } from "./lib/error-page";
 import { attachSupabaseAuth } from "@/integrations/supabase/auth-attacher";
+import { getSession } from "./lib/auth";
 
 const errorMiddleware = createMiddleware().server(async ({ next }) => {
   try {
@@ -18,7 +19,13 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
   }
 });
 
+// Attaches the server-signed Crossi session token to every server fn call.
+const attachCrossiSession = createMiddleware({ type: "function" }).client(async ({ next }) => {
+  const t = getSession()?.session_token;
+  return next({ headers: t ? { "x-crossi-session": t } : {} });
+});
+
 export const startInstance = createStart(() => ({
-  functionMiddleware: [attachSupabaseAuth],
+  functionMiddleware: [attachSupabaseAuth, attachCrossiSession],
   requestMiddleware: [errorMiddleware],
 }));

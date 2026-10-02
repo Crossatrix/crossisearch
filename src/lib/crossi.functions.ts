@@ -62,7 +62,21 @@ function extractLocs(xml: string): string[] {
 
 const UA = "Mozilla/5.0 (compatible; CrossiSearchBot/1.0; +https://crossisearch.lovable.app)";
 
+// Block requests to private/internal hosts (SSRF protection).
+function assertPublicUrl(url: string) {
+  const u = new URL(url);
+  if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("Unsupported URL");
+  const h = u.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (
+    h === "localhost" || h.endsWith(".localhost") || h.endsWith(".internal") || h.endsWith(".local") ||
+    /^(0|10|127)\./.test(h) || /^169\.254\./.test(h) || /^192\.168\./.test(h) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(h) || /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(h) ||
+    h === "::1" || h === "::" || /^f[cd]/.test(h) || /^fe80/.test(h) || /^::ffff:/.test(h) || /^\d+$/.test(h)
+  ) throw new Error("Blocked host");
+}
+
 async function fetchText(url: string): Promise<string> {
+  assertPublicUrl(url);
   const res = await fetch(url, {
     headers: {
       "User-Agent": UA,
@@ -79,6 +93,7 @@ async function fetchText(url: string): Promise<string> {
 // Ping a URL — returns true if the server responded at all (any status).
 // Throws (caught) when DNS/connection/timeout fails => site doesn't exist.
 async function pingUrl(url: string): Promise<boolean> {
+  try { assertPublicUrl(url); } catch { return false; }
   try {
     const res = await fetch(url, {
       method: "HEAD",
@@ -255,8 +270,17 @@ export const crossatrixLogin = createServerFn({ method: "POST" })
       console.error("admin auto-grant failed", e);
     }
 
-    return body as { user: { id: string; email: string }; access_token: string };
+    const u = (body as { user?: { id: string; email: string } }).user;
+    if (!u?.id || !u?.email) return { error: "Login failed" };
+    const { signSession } = await import("./session.server");
+    return {
+      ...(body as { user: { id: string; email: string }; access_token: string }),
+      session_token: await signSession(u.id, u.email),
+    };
   });
+
+const isCaller = async (userId: string, email?: string) =>
+  (await import("./session.server")).isCaller(userId, email);
 
 // ========== INTERNAL: shared indexing primitives ==========
 async function alreadyIndexed(url: string): Promise<boolean> {
@@ -384,10 +408,13 @@ export const submitUrl = createServerFn({ method: "POST" })
     ]),
   )
   .handler(async ({ data }) => {
+    if (!(await isCaller(data.user_id))) return { error: "Unauthorized - please sign in again" };
     try {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
       if (data.kind === "file") {
+        if (!data.storage_path.startsWith(`${data.user_id}/`) || data.storage_path.includes(".."))
+          return { error: "Invalid file" };
         const r = await indexFileFromStorage(
           data.storage_path,
           data.filename,
@@ -631,6 +658,7 @@ export const isAdmin = createServerFn({ method: "POST" })
   });
 
 async function requireAdmin(userId: string): Promise<boolean> {
+  if (!(await isCaller(userId))) return false;
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data } = await supabaseAdmin
     .from("user_roles")
@@ -691,6 +719,7 @@ export const listApiKeys = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
+    if (!(await isCaller(data.user_id))) return { error: "Unauthorized - please sign in again" };
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     let q = supabaseAdmin
       .from("api_keys")
@@ -712,6 +741,7 @@ export const createApiKey = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
+    if (!(await isCaller(data.user_id))) return { error: "Unauthorized - please sign in again" };
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const scope = data.scope ?? "read";
     if (scope === "write" && !(await requireAdmin(data.user_id))) {
@@ -744,6 +774,7 @@ export const createApiKey = createServerFn({ method: "POST" })
 export const revokeApiKey = createServerFn({ method: "POST" })
   .inputValidator(z.object({ user_id: z.string().min(1), id: z.string().uuid() }))
   .handler(async ({ data }) => {
+    if (!(await isCaller(data.user_id))) return { error: "Unauthorized - please sign in again" };
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin
       .from("api_keys")
@@ -763,6 +794,7 @@ export const upgradeApiKeyPlan = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
+    if (!(await isCaller(data.user_id))) return { error: "Unauthorized - please sign in again" };
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const cfg = PLAN_LIMITS[data.plan];
     if (!cfg) return { error: "Unknown plan" };
@@ -975,4 +1007,17 @@ export const testRobotsStatus = createServerFn({ method: "POST" })
       .eq("id", data.page_id);
     if (error) return { error: error.message };
     return { success: true, robots_status: status };
+  });
+
+// Issues a one-time signed upload URL scoped to the caller's own folder.
+export const createUploadUrl = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ user_id: z.string().min(1), name: z.string().min(1).max(255) }))
+  .handler(async ({ data }) => {
+    if (!(await isCaller(data.user_id))) return { error: "Unauthorized - please sign in again" };
+    const safe = data.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `${data.user_id}/${Date.now()}-${safe}`;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: u, error } = await supabaseAdmin.storage.from("submissions").createSignedUploadUrl(path);
+    if (error || !u) return { error: "Could not prepare upload" };
+    return { path: u.path, token: u.token };
   });

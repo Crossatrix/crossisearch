@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { Header } from "@/components/Header";
 import { useSession } from "@/lib/auth";
-import { submitUrl } from "@/lib/crossi.functions";
+import { submitUrl, createUploadUrl } from "@/lib/crossi.functions";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/submit")({
@@ -24,6 +24,7 @@ function SubmitPage() {
   const session = useSession();
   const navigate = useNavigate();
   const submit = useServerFn(submitUrl);
+  const getUploadUrl = useServerFn(createUploadUrl);
 
   const [url, setUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -78,10 +79,15 @@ function SubmitPage() {
           displayName += originalExt;
         }
         const safeName = displayName.replace(/[^a-zA-Z0-9._-]/g, "_");
-        const path = `${session!.user.id}/${Date.now()}-${safeName}`;
+        const up = await getUploadUrl({ data: { user_id: session!.user.id, name: safeName } });
+        if ("error" in up && up.error) {
+          setErr(up.error);
+          return;
+        }
+        const path = (up as { path: string }).path;
         const { error: upErr } = await supabase.storage
           .from("submissions")
-          .upload(path, file, { upsert: false, contentType: file.type });
+          .uploadToSignedUrl(path, (up as { token: string }).token, file, { contentType: file.type });
         if (upErr) {
           setErr(upErr.message);
           return;
