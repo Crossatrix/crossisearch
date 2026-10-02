@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { Header } from "@/components/Header";
 import { useSession } from "@/lib/auth";
-import { submitUrl } from "@/lib/crossi.functions";
+import { submitUrl, createUploadUrl } from "@/lib/crossi.functions";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/submit")({
@@ -24,6 +24,7 @@ function SubmitPage() {
   const session = useSession();
   const navigate = useNavigate();
   const submit = useServerFn(submitUrl);
+  const getUploadUrl = useServerFn(createUploadUrl);
 
   const [url, setUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
