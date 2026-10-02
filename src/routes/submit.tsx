@@ -78,10 +78,15 @@ function SubmitPage() {
           displayName += originalExt;
         }
         const safeName = displayName.replace(/[^a-zA-Z0-9._-]/g, "_");
-        const path = `${session!.user.id}/${Date.now()}-${safeName}`;
+        const up = await getUploadUrl({ data: { user_id: session!.user.id, name: safeName } });
+        if ("error" in up && up.error) {
+          setErr(up.error);
+          return;
+        }
+        const path = (up as { path: string }).path;
         const { error: upErr } = await supabase.storage
           .from("submissions")
-          .upload(path, file, { upsert: false, contentType: file.type });
+          .uploadToSignedUrl(path, (up as { token: string }).token, file, { contentType: file.type });
         if (upErr) {
           setErr(upErr.message);
           return;

@@ -1008,3 +1008,16 @@ export const testRobotsStatus = createServerFn({ method: "POST" })
     if (error) return { error: error.message };
     return { success: true, robots_status: status };
   });
+
+// Issues a one-time signed upload URL scoped to the caller's own folder.
+export const createUploadUrl = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ user_id: z.string().min(1), name: z.string().min(1).max(255) }))
+  .handler(async ({ data }) => {
+    if (!(await isCaller(data.user_id))) return { error: "Unauthorized - please sign in again" };
+    const safe = data.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `${data.user_id}/${Date.now()}-${safe}`;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: u, error } = await supabaseAdmin.storage.from("submissions").createSignedUploadUrl(path);
+    if (error || !u) return { error: "Could not prepare upload" };
+    return { path: u.path, token: u.token };
+  });
