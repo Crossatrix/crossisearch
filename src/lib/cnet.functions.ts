@@ -28,7 +28,6 @@ async function croin(action: "debit" | "credit", user_id: string, amount: number
 const isCnetAdmin = (email: string) => CNET_ADMINS.includes(email.toLowerCase());
 const isCaller = async (userId: string, email?: string) =>
   (await import("./session.server")).isCaller(userId, email);
-const DENY = { error: "Unauthorized - please sign in again" };
 const normPath = (p: string) => {
   let s = ("/" + (p || "").replace(/^\/+/, "")).replace(/\/+$/, "");
   if (!s || s === "/") s = "/index.html";
@@ -49,7 +48,7 @@ export const cnetListTlds = createServerFn({ method: "POST" }).handler(async () 
 export const cnetAddTld = createServerFn({ method: "POST" })
   .inputValidator(z.object({ ...user, tld: label, price: z.number().int().min(0).max(1_000_000) }))
   .handler(async ({ data }) => {
-    if (!(await isCaller(data.user_id, data.email))) return DENY;
+    if (!(await isCaller(data.user_id, data.email))) return { error: "Unauthorized - please sign in again" };
     if (!isCnetAdmin(data.email)) return { error: "Not allowed" };
     const s = await db();
     const { error } = await s
@@ -61,7 +60,7 @@ export const cnetAddTld = createServerFn({ method: "POST" })
 export const cnetBuyDomain = createServerFn({ method: "POST" })
   .inputValidator(z.object({ ...user, name: label, tld: label }))
   .handler(async ({ data }) => {
-    if (!(await isCaller(data.user_id, data.email))) return DENY;
+    if (!(await isCaller(data.user_id, data.email))) return { error: "Unauthorized - please sign in again" };
     const s = await db();
     const domain = `${data.name}.${data.tld}`;
     const { data: t } = await s.from("cnet_tlds").select("price_croins").eq("tld", data.tld).maybeSingle();
@@ -137,7 +136,7 @@ export const cnetSaveFile = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
-    if (!(await isCaller(data.user_id))) return DENY;
+    if (!(await isCaller(data.user_id))) return { error: "Unauthorized - please sign in again" };
     const d = await ownedDomain(data.user_id, data.domain_id);
     if (!d) return { error: "Not your domain" };
     if (data.host !== d.domain && !data.host.endsWith("." + d.domain)) return { error: "Host must be your domain or a subdomain" };
@@ -154,7 +153,7 @@ export const cnetSaveFile = createServerFn({ method: "POST" })
 export const cnetDeleteFile = createServerFn({ method: "POST" })
   .inputValidator(z.object({ user_id: z.string().min(1), domain_id: z.string().uuid(), id: z.string().uuid() }))
   .handler(async ({ data }) => {
-    if (!(await isCaller(data.user_id))) return DENY;
+    if (!(await isCaller(data.user_id))) return { error: "Unauthorized - please sign in again" };
     if (!(await ownedDomain(data.user_id, data.domain_id))) return { error: "Not your domain" };
     const s = await db();
     await s.from("cnet_files").delete().eq("id", data.id).eq("domain_id", data.domain_id);
@@ -164,7 +163,7 @@ export const cnetDeleteFile = createServerFn({ method: "POST" })
 export const cnetSetConsole = createServerFn({ method: "POST" })
   .inputValidator(z.object({ user_id: z.string().min(1), domain_id: z.string().uuid(), disabled: z.boolean() }))
   .handler(async ({ data }) => {
-    if (!(await isCaller(data.user_id))) return DENY;
+    if (!(await isCaller(data.user_id))) return { error: "Unauthorized - please sign in again" };
     if (!(await ownedDomain(data.user_id, data.domain_id))) return { error: "Not your domain" };
     const s = await db();
     const { error } = await s.from("cnet_domains").update({ console_disabled: data.disabled }).eq("id", data.domain_id).eq("owner_id", data.user_id);
@@ -244,7 +243,7 @@ export const cnetSearch = createServerFn({ method: "POST" })
 export const cnetRemoveTld = createServerFn({ method: "POST" })
   .inputValidator(z.object({ ...user, tld: label }))
   .handler(async ({ data }) => {
-    if (!(await isCaller(data.user_id, data.email))) return DENY;
+    if (!(await isCaller(data.user_id, data.email))) return { error: "Unauthorized - please sign in again" };
     if (!isCnetAdmin(data.email)) return { error: "Not allowed" };
     const s = await db();
     const { data: ds } = await s.from("cnet_domains").select("id").eq("tld", data.tld);
@@ -260,7 +259,7 @@ export const cnetRemoveTld = createServerFn({ method: "POST" })
 export const cnetDeleteDomain = createServerFn({ method: "POST" })
   .inputValidator(z.object({ user_id: z.string().min(1), domain_id: z.string().uuid() }))
   .handler(async ({ data }) => {
-    if (!(await isCaller(data.user_id))) return DENY;
+    if (!(await isCaller(data.user_id))) return { error: "Unauthorized - please sign in again" };
     const d = await ownedDomain(data.user_id, data.domain_id);
     if (!d) return { error: "Not your domain" };
     const s = await db();
@@ -285,7 +284,7 @@ export const cnetSaveMany = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
-    if (!(await isCaller(data.user_id))) return DENY;
+    if (!(await isCaller(data.user_id))) return { error: "Unauthorized - please sign in again" };
     const d = await ownedDomain(data.user_id, data.domain_id);
     if (!d) return { error: "Not your domain" };
     if (data.host !== d.domain && !data.host.endsWith("." + d.domain)) return { error: "Host must be your domain or a subdomain" };
@@ -331,7 +330,7 @@ export const cnetSaveState = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
-    if (!(await isCaller(data.user_id))) return DENY;
+    if (!(await isCaller(data.user_id))) return { error: "Unauthorized - please sign in again" };
     const s = await db();
     await s.from("cnet_browser_state").upsert({
       user_id: data.user_id,
