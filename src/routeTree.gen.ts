@@ -9,47 +9,22 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SubmitRouteImport } from './routes/submit'
-import { Route as SearchRouteImport } from './routes/search'
-import { Route as DocsRouteImport } from './routes/docs'
-import { Route as DashboardRouteImport } from './routes/dashboard'
-import { Route as BrowserRouteImport } from './routes/browser'
-import { Route as AuthRouteImport } from './routes/auth'
-import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ApiCrossiAiRouteImport } from './routes/api/crossi-ai'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as BrowserRouteImport } from './routes/browser'
+import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as DocsRouteImport } from './routes/docs'
+import { Route as SearchRouteImport } from './routes/search'
+import { Route as SubmitRouteImport } from './routes/submit'
 import { Route as ApiAiOverviewRouteImport } from './routes/api/ai-overview'
-import { Route as ApiPublicSubmitRouteImport } from './routes/api/public/submit'
+import { Route as ApiCrossiAiRouteImport } from './routes/api/crossi-ai'
 import { Route as ApiPublicSearchRouteImport } from './routes/api/public/search'
+import { Route as ApiPublicSubmitRouteImport } from './routes/api/public/submit'
 
-const SubmitRoute = SubmitRouteImport.update({
-  id: '/submit',
-  path: '/submit',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SearchRoute = SearchRouteImport.update({
-  id: '/search',
-  path: '/search',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DocsRoute = DocsRouteImport.update({
-  id: '/docs',
-  path: '/docs',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DashboardRoute = DashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const BrowserRoute = BrowserRouteImport.update({
-  id: '/browser',
-  path: '/browser',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthRoute = AuthRouteImport.update({
-  id: '/auth',
-  path: '/auth',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -57,14 +32,34 @@ const AdminRoute = AdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiCrossiAiRoute = ApiCrossiAiRouteImport.update({
-  id: '/api/crossi-ai',
-  path: '/api/crossi-ai',
+const BrowserRoute = BrowserRouteImport.update({
+  id: '/browser',
+  path: '/browser',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsRoute = DocsRouteImport.update({
+  id: '/docs',
+  path: '/docs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SearchRoute = SearchRouteImport.update({
+  id: '/search',
+  path: '/search',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SubmitRoute = SubmitRouteImport.update({
+  id: '/submit',
+  path: '/submit',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAiOverviewRoute = ApiAiOverviewRouteImport.update({
@@ -72,14 +67,19 @@ const ApiAiOverviewRoute = ApiAiOverviewRouteImport.update({
   path: '/api/ai-overview',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicSubmitRoute = ApiPublicSubmitRouteImport.update({
-  id: '/api/public/submit',
-  path: '/api/public/submit',
+const ApiCrossiAiRoute = ApiCrossiAiRouteImport.update({
+  id: '/api/crossi-ai',
+  path: '/api/crossi-ai',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicSearchRoute = ApiPublicSearchRouteImport.update({
   id: '/api/public/search',
   path: '/api/public/search',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicSubmitRoute = ApiPublicSubmitRouteImport.update({
+  id: '/api/public/submit',
+  path: '/api/public/submit',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -188,46 +188,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/submit': {
-      id: '/submit'
-      path: '/submit'
-      fullPath: '/submit'
-      preLoaderRoute: typeof SubmitRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/search': {
-      id: '/search'
-      path: '/search'
-      fullPath: '/search'
-      preLoaderRoute: typeof SearchRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/docs': {
-      id: '/docs'
-      path: '/docs'
-      fullPath: '/docs'
-      preLoaderRoute: typeof DocsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dashboard': {
-      id: '/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/browser': {
-      id: '/browser'
-      path: '/browser'
-      fullPath: '/browser'
-      preLoaderRoute: typeof BrowserRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/auth': {
-      id: '/auth'
-      path: '/auth'
-      fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -237,18 +202,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/crossi-ai': {
-      id: '/api/crossi-ai'
-      path: '/api/crossi-ai'
-      fullPath: '/api/crossi-ai'
-      preLoaderRoute: typeof ApiCrossiAiRouteImport
+    '/browser': {
+      id: '/browser'
+      path: '/browser'
+      fullPath: '/browser'
+      preLoaderRoute: typeof BrowserRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs': {
+      id: '/docs'
+      path: '/docs'
+      fullPath: '/docs'
+      preLoaderRoute: typeof DocsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/search': {
+      id: '/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof SearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/submit': {
+      id: '/submit'
+      path: '/submit'
+      fullPath: '/submit'
+      preLoaderRoute: typeof SubmitRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/ai-overview': {
@@ -258,11 +251,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAiOverviewRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/submit': {
-      id: '/api/public/submit'
-      path: '/api/public/submit'
-      fullPath: '/api/public/submit'
-      preLoaderRoute: typeof ApiPublicSubmitRouteImport
+    '/api/crossi-ai': {
+      id: '/api/crossi-ai'
+      path: '/api/crossi-ai'
+      fullPath: '/api/crossi-ai'
+      preLoaderRoute: typeof ApiCrossiAiRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/search': {
@@ -270,6 +263,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/search'
       fullPath: '/api/public/search'
       preLoaderRoute: typeof ApiPublicSearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/submit': {
+      id: '/api/public/submit'
+      path: '/api/public/submit'
+      fullPath: '/api/public/submit'
+      preLoaderRoute: typeof ApiPublicSubmitRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
