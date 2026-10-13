@@ -1,8 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Header } from "@/components/Header";
-import { crossatrixLogin } from "@/lib/crossi.functions";
+import { crossatrixLogin, crossatrixTokenLogin } from "@/lib/crossi.functions";
 import { setSession } from "@/lib/auth";
 
 export const Route = createFileRoute("/auth")({
@@ -17,11 +17,33 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const login = useServerFn(crossatrixLogin);
+  const tokenLogin = useServerFn(crossatrixTokenLogin);
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const access_token = p.get("access_token");
+    const em = p.get("email");
+    if (!access_token || !em) return;
+    window.history.replaceState(null, "", "/auth");
+    setEmail(em);
+    setLoading(true);
+    tokenLogin({ data: { email: em, access_token } })
+      .then((res) => {
+        if ("error" in res && res.error) setErr(res.error);
+        else if ("access_token" in res) {
+          setSession({ user: res.user, access_token: res.access_token, session_token: res.session_token });
+          navigate({ to: "/" });
+        }
+      })
+      .catch((e) => setErr(e instanceof Error ? e.message : "Login failed"))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
