@@ -236,13 +236,20 @@ async function awardCroins(userId: string, amount: number, description: string) 
 }
 
 // ========== LOGIN ==========
+export const crossatrixTokenLogin = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ email: z.string().email(), access_token: z.string().min(1).max(8000) }))
+  .handler(async ({ data }) => completeLogin({ email: data.email, access_token: data.access_token }));
+
 export const crossatrixLogin = createServerFn({ method: "POST" })
   .inputValidator(z.object({ email: z.string().email(), password: z.string().min(1) }))
-  .handler(async ({ data }) => {
+  .handler(async ({ data }) => completeLogin(data));
+
+async function completeLogin(payload: Record<string, string>) {
+  {
     const res = await fetch(CROSSATRIX_AUTH_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) return { error: (body as { error?: string }).error || "Login failed" };
