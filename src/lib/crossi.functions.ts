@@ -284,7 +284,8 @@ async function completeLogin(payload: Record<string, string>) {
       ...(body as { user: { id: string; email: string }; access_token: string }),
       session_token: await signSession(u.id, u.email),
     };
-  });
+  }
+}
 
 const isCaller = async (userId: string, email?: string) =>
   (await import("./session.server")).isCaller(userId, email);
