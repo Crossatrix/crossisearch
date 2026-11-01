@@ -241,8 +241,14 @@ export const crossatrixTokenLogin = createServerFn({ method: "POST" })
   .handler(async ({ data }) => completeLogin({ email: data.email, access_token: data.access_token }));
 
 export const crossatrixLogin = createServerFn({ method: "POST" })
-  .inputValidator(z.object({ email: z.string().email(), password: z.string().min(1) }))
-  .handler(async ({ data }) => completeLogin(data));
+  .inputValidator(z.object({ identifier: z.string().trim().min(1).max(320), password: z.string().min(1) }))
+  .handler(async ({ data }) =>
+    completeLogin(
+      data.identifier.includes("@")
+        ? { email: data.identifier, password: data.password }
+        : { username: data.identifier, password: data.password },
+    ),
+  );
 
 async function completeLogin(payload: Record<string, string>) {
   {
