@@ -50,7 +50,7 @@ function AuthPage() {
     setLoading(true);
     setErr(null);
     try {
-      const res = await login({ data: { email, password } });
+      const res = await login({ data: { identifier: email, password } });
       if ("error" in res && res.error) {
         setErr(res.error);
       } else if ("access_token" in res) {
@@ -80,11 +80,13 @@ function AuthPage() {
           </div>
           <div>
             <label htmlFor="email" className="block text-sm mb-1.5">
-              Email
+              Email or username
             </label>
             <input
               id="email"
-              type="email"
+              type="text"
+              autoComplete="username"
+              autoCapitalize="none"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
