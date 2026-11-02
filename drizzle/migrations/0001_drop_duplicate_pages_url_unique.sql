@@ -1,0 +1,1 @@
+ALTER TABLE public.pages DROP CONSTRAINT IF EXISTS pages_url_unique;
